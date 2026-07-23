@@ -1,0 +1,17 @@
+node_modules/
+dist/
+.vite/
+backend/myenv/
+backend/**/__pycache__/
+**/__pycache__/
+*.pyc
+.venv/
+venv/
+backend/ai/models/*.h5
+*.h5
+*.db
+backend/temp_uploads/
+temp_*
+.DS_Store
+.env
+.env.local

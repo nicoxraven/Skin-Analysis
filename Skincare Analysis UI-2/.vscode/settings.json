@@ -1,0 +1,18 @@
+{
+  "files.watcherExclude": {
+    "**/backend/myenv/**": true,
+    "**/node_modules/**": true,
+    "**/backend/ai/models/**": true,
+    "**/*.h5": true,
+    "**/__pycache__/**": true
+  },
+  "search.exclude": {
+    "**/backend/myenv": true,
+    "**/node_modules": true,
+    "**/backend/ai/models": true,
+    "**/*.h5": true
+  },
+  "files.exclude": {
+    "**/backend/myenv": true
+  }
+}

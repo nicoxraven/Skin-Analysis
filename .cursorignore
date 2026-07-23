@@ -1,0 +1,8 @@
+Skincare Analysis UI-2/backend/myenv/
+Skincare Analysis UI-2/node_modules/
+Skincare Analysis UI-2/backend/ai/models/
+**/*.h5
+**/*.tflite
+**/__pycache__/
+**/*.db
+**/dist/

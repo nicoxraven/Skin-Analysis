@@ -1,0 +1,24 @@
+# Heavy folders that crash / freeze the editor (OOM)
+backend/myenv/
+**/node_modules/
+**/__pycache__/
+**/.venv/
+**/venv/
+**/dist/
+**/.vite/
+
+# Large ML / binary assets — do not index
+backend/ai/models/
+**/*.h5
+**/*.hdf5
+**/*.tflite
+**/*.onnx
+**/*.pt
+**/*.pth
+**/*.pkl
+**/*.joblib
+
+# Uploads & local DB
+backend/temp_uploads/
+**/*.db
+**/.DS_Store
