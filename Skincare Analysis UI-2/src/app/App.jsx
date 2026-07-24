@@ -1,7 +1,10 @@
-import { useState, useEffect, useRef } from "react";
-import { Bell, Search, Menu } from "lucide-react";
-import { getUserAnalyses, saveAnalysis } from "../services/api";
-import { DEFAULT_ANALYSIS, NOTIFICATIONS } from "./lib/constants";
+import { useState, useEffect, useRef, useCallback } from "react";
+import { Bell, Menu } from "lucide-react";
+import {
+  getUserAnalyses,
+  getLatestAnalysis,
+  getNotifications,
+} from "../services/api";
 import { LoginPage } from "./components/LoginPage";
 import { UploadView } from "./components/UploadView";
 import { AnalyzingView } from "./components/AnalyzingView";
@@ -12,28 +15,74 @@ import { NotifPanel } from "./components/NotifPanel";
 import { AdminDashboard } from "./components/admin/AdminDashboard";
 import { AdminUsers } from "./components/admin/AdminUsers";
 import { AdminAnalyses } from "./components/admin/AdminAnalyses";
-import { AdminConditions } from "./components/admin/AdminConditions";
-import { AdminIngredients } from "./components/admin/AdminIngredients";
 import { AdminProducts } from "./components/admin/AdminProducts";
-import { AdminFeedback } from "./components/admin/AdminFeedback";
 
 export default function App() {
   const [user, setUser] = useState(null);
-  const [userSection, setUserSection] = useState("upload");
+  const [userSection, setUserSection] = useState("home");
   const [adminSection, setAdminSection] = useState("dashboard");
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [notifOpen, setNotifOpen] = useState(false);
   const notifRef = useRef(null);
-  const unreadCount = NOTIFICATIONS.filter((n) => n.unread).length;
+  const [unreadCount, setUnreadCount] = useState(0);
 
   const [uploadingFile, setUploadingFile] = useState(null);
-  const [currentAnalysis, setCurrentAnalysis] = useState(DEFAULT_ANALYSIS);
+  const [uploadMode, setUploadMode] = useState("first"); // first | weekly
+  const [currentAnalysis, setCurrentAnalysis] = useState(null);
+  const [canRescan, setCanRescan] = useState(true);
+  const [daysUntilRescan, setDaysUntilRescan] = useState(7);
   const [userHistory, setUserHistory] = useState([]);
+  const [progressSummary, setProgressSummary] = useState(null);
+  const [bootstrapping, setBootstrapping] = useState(false);
 
+  const refreshNotifications = useCallback(async (userId) => {
+    const rows = await getNotifications(userId);
+    setUnreadCount(rows.filter((n) => n.unread).length);
+  }, []);
+
+  const refreshProgress = useCallback(async (userId) => {
+    const data = await getUserAnalyses(userId);
+    setUserHistory(data.history || []);
+    setProgressSummary(data.summary || null);
+  }, []);
+
+  const refreshLatest = useCallback(async (userId) => {
+    const latest = await getLatestAnalysis(userId);
+    if (latest?.has_analysis && latest.analysis) {
+      setCurrentAnalysis(latest.analysis);
+      setCanRescan(!!latest.can_rescan);
+      setDaysUntilRescan(latest.days_until_rescan ?? 0);
+      return latest;
+    }
+    setCurrentAnalysis(null);
+    setCanRescan(true);
+    setDaysUntilRescan(0);
+    return latest;
+  }, []);
+
+  // Load real user data after login
   useEffect(() => {
-    if (!user) return;
-    getUserAnalyses(user.id).then(setUserHistory);
-  }, [user]);
+    if (!user || (user.role || "user").toLowerCase() !== "user") return;
+    let cancelled = false;
+    (async () => {
+      setBootstrapping(true);
+      const latest = await refreshLatest(user.id);
+      await refreshProgress(user.id);
+      await refreshNotifications(user.id);
+      if (cancelled) return;
+      if (!latest?.has_analysis) {
+        setUploadMode("first");
+        setUserSection("upload");
+      } else if (latest.can_rescan) {
+        setUploadMode("weekly");
+        setUserSection("home");
+      } else {
+        setUserSection("home");
+      }
+      setBootstrapping(false);
+    })();
+    return () => { cancelled = true; };
+  }, [user, refreshLatest, refreshProgress, refreshNotifications]);
 
   useEffect(() => {
     const handler = (e) => {
@@ -43,6 +92,20 @@ export default function App() {
     return () => document.removeEventListener("mousedown", handler);
   }, []);
 
+  // Sidebar "My Skin" / home routing
+  const handleSetUserSection = (id) => {
+    if (id === "home") {
+      if (!currentAnalysis) {
+        setUploadMode("first");
+        setUserSection("upload");
+      } else {
+        setUserSection("home");
+      }
+      return;
+    }
+    setUserSection(id);
+  };
+
   const handleStartAnalysis = (file) => {
     setUploadingFile(file);
     setUserSection("analyzing");
@@ -50,27 +113,72 @@ export default function App() {
 
   const handleAnalysisCompleted = async (result) => {
     setCurrentAnalysis(result);
-    setUserSection("results");
+    setCanRescan(false);
+    setDaysUntilRescan(result.days_until_rescan ?? 7);
+    setUserSection("home");
     if (user?.id) {
-      const history = await getUserAnalyses(user.id);
-      setUserHistory(history);
+      await refreshProgress(user.id);
+      await refreshNotifications(user.id);
+      await refreshLatest(user.id);
     }
   };
 
-  const handleSaveAnalysis = async () => {
-    if (!user) return false;
-    const res = await saveAnalysis();
-    if (res.success) {
-      const updatedHistory = await getUserAnalyses(user.id);
-      setUserHistory(updatedHistory);
-      return true;
-    }
-    return false;
+  const handleWeeklyRescan = () => {
+    setUploadMode("weekly");
+    setUserSection("upload");
   };
 
   if (!user) return <LoginPage onLogin={(u) => setUser(u)} />;
 
   const role = (user.role || "user").toLowerCase();
+
+  const renderUserMain = () => {
+    if (bootstrapping) {
+      return (
+        <div className="max-w-sm mx-auto px-4 py-24 text-center text-sm text-muted-foreground">
+          Loading your skin plan…
+        </div>
+      );
+    }
+
+    if (userSection === "upload") {
+      return <UploadView onAnalyze={handleStartAnalysis} mode={uploadMode} />;
+    }
+    if (userSection === "analyzing") {
+      return (
+        <AnalyzingView
+          imageFile={uploadingFile}
+          userId={user.id}
+          onDone={handleAnalysisCompleted}
+          onCancel={() => setUserSection(currentAnalysis ? "home" : "upload")}
+        />
+      );
+    }
+    if (userSection === "progress") {
+      return (
+        <ProgressView
+          historyData={userHistory}
+          summary={progressSummary}
+          onBack={() => setUserSection(currentAnalysis ? "home" : "upload")}
+          onRescan={handleWeeklyRescan}
+        />
+      );
+    }
+    // home / results
+    if (currentAnalysis) {
+      return (
+        <ResultsView
+          analysis={currentAnalysis}
+          userId={user.id}
+          canRescan={canRescan}
+          daysUntilRescan={daysUntilRescan}
+          onProgress={() => setUserSection("progress")}
+          onWeeklyRescan={handleWeeklyRescan}
+        />
+      );
+    }
+    return <UploadView onAnalyze={handleStartAnalysis} mode="first" />;
+  };
 
   return (
     <div className="flex h-screen bg-background overflow-hidden" style={{ fontFamily: "'DM Sans', sans-serif" }}>
@@ -86,8 +194,8 @@ export default function App() {
       <Sidebar
         user={user}
         onLogout={() => setUser(null)}
-        userSection={userSection}
-        setUserSection={setUserSection}
+        userSection={userSection === "results" ? "home" : userSection}
+        setUserSection={handleSetUserSection}
         adminSection={adminSection}
         setAdminSection={setAdminSection}
         open={sidebarOpen}
@@ -99,17 +207,6 @@ export default function App() {
           <button type="button" onClick={() => setSidebarOpen(true)} className="lg:hidden p-2 rounded-xl hover:bg-muted text-muted-foreground transition-colors">
             <Menu size={18} />
           </button>
-
-          {/* <div className="flex-1 flex items-center gap-2 max-w-xs">
-            <div className="flex items-center gap-2 bg-card border border-border rounded-xl px-3 py-2 w-full">
-              <Search size={13} className="text-muted-foreground flex-shrink-0" />
-              <input
-                type="text"
-                placeholder="Search…"
-                className="text-sm bg-transparent outline-none text-foreground placeholder:text-muted-foreground flex-1 min-w-0"
-              />
-            </div>
-          </div> */}
 
           <div className="ml-auto flex items-center gap-2">
             <div ref={notifRef} className="relative">
@@ -125,7 +222,13 @@ export default function App() {
                   </span>
                 )}
               </button>
-              {notifOpen && <NotifPanel onClose={() => setNotifOpen(false)} />}
+              {notifOpen && role === "user" && (
+                <NotifPanel
+                  userId={user.id}
+                  onClose={() => setNotifOpen(false)}
+                  onUnreadChange={setUnreadCount}
+                />
+              )}
             </div>
 
             <div className="w-8 h-8 rounded-full bg-primary flex items-center justify-center cursor-default">
@@ -135,38 +238,13 @@ export default function App() {
         </header>
 
         <main className="flex-1 overflow-y-auto">
-          {role === "user" && (
-            <>
-              {userSection === "upload" && <UploadView onAnalyze={handleStartAnalysis} />}
-              {userSection === "analyzing" && (
-                <AnalyzingView
-                  imageFile={uploadingFile}
-                  userId={user.id}
-                  onDone={handleAnalysisCompleted}
-                  onCancel={() => setUserSection("upload")}
-                />
-              )}
-              {userSection === "results" && (
-                <ResultsView
-                  analysis={currentAnalysis}
-                  onSave={handleSaveAnalysis}
-                  onProgress={() => setUserSection("progress")}
-                />
-              )}
-              {userSection === "progress" && (
-                <ProgressView historyData={userHistory} onBack={() => setUserSection("results")} />
-              )}
-            </>
-          )}
+          {role === "user" && renderUserMain()}
           {role === "admin" && (
             <div className="p-5 sm:p-6">
               {adminSection === "dashboard" && <AdminDashboard />}
               {adminSection === "users" && <AdminUsers />}
               {adminSection === "analyses" && <AdminAnalyses />}
-              {adminSection === "conditions" && <AdminConditions />}
-              {adminSection === "ingredients" && <AdminIngredients />}
               {adminSection === "products" && <AdminProducts />}
-              {adminSection === "feedback" && <AdminFeedback />}
             </div>
           )}
         </main>

@@ -62,6 +62,11 @@ export async function analyzeSelfie(imageFile, userId = 1) {
   }
 
   const data = await response.json();
+
+  if (data.ui) {
+    return { ...data.ui, imagePreview: base64Preview };
+  }
+
   const scores = data.scores || {};
   const concerns = [];
 
@@ -85,6 +90,7 @@ export async function analyzeSelfie(imageFile, userId = 1) {
   const rec = data.recommendation || {};
 
   return {
+    analysis_id: data.analysis_id,
     score: data.overall_score,
     skinType: dominantCondition,
     concerns,
@@ -96,5 +102,7 @@ export async function analyzeSelfie(imageFile, userId = 1) {
     amRoutine: mapToRoutine(rec.day_routine),
     pmRoutine: mapToRoutine(rec.night_routine),
     imagePreview: base64Preview,
+    can_rescan: false,
+    days_until_rescan: 7,
   };
 }

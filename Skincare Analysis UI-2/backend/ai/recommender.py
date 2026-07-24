@@ -60,11 +60,23 @@ def analyze_progress(previous_scores, current_scores):
 # ---------------------------------------------------------
 # 3. Main Routine Builder
 # ---------------------------------------------------------
+CONDITION_ALIASES = {
+    "Dry Skin": "Dryness",
+    "Dryness": "Dryness",
+    "Acne": "Acne",
+    "Oily Skin": "Oily Skin",
+    "Dark Spots": "Dark Spots",
+    "Wrinkles": "Wrinkles",
+}
+
+def normalize_condition(name):
+    return CONDITION_ALIASES.get(name, name)
+
 def generate_routine(current_scores, previous_scores=None):
     progress = analyze_progress(previous_scores, current_scores)
     
     active_conditions = [cond for cond, score in current_scores.items() if score >= 40.0]
-    primary_condition = active_conditions[0] if active_conditions else "Dryness"
+    primary_condition = normalize_condition(active_conditions[0] if active_conditions else "Dryness")
 
     intensity = "mild" if progress["status"] == "improved" else "harsh"
 

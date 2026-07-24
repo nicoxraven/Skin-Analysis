@@ -1,6 +1,9 @@
 # backend/database.py
 import datetime
-from sqlalchemy import create_engine, Column, Integer, String, Float, DateTime, ForeignKey, Text, JSON
+from sqlalchemy import (
+    create_engine, Column, Integer, String, Float, DateTime,
+    ForeignKey, Text, JSON, Boolean, UniqueConstraint,
+)
 from sqlalchemy.orm import declarative_base, sessionmaker, relationship
 
 SQLITE_URL = "sqlite:///./skincare_app.db"
@@ -9,9 +12,6 @@ engine = create_engine(SQLITE_URL, connect_args={"check_same_thread": False})
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 Base = declarative_base()
 
-# ---------------------------------------------------------
-# DATABASE TABLES
-# ---------------------------------------------------------
 
 class User(Base):
     __tablename__ = "users"
@@ -20,14 +20,17 @@ class User(Base):
     name = Column(String, nullable=False)
     email = Column(String, unique=True, index=True, nullable=False)
     password = Column(String, nullable=False)
-    role = Column(String, default="user")  # 'user' or 'admin'
+    role = Column(String, default="user")
     detected_skin_type = Column(String, default="Pending Scan")
     age = Column(Integer, nullable=True)
-    status = Column(String, default="Active")  # 'Active', 'Suspended'
+    status = Column(String, default="Active")
     created_at = Column(DateTime, default=datetime.datetime.utcnow)
 
     analyses = relationship("Analysis", back_populates="owner")
     feedbacks = relationship("Feedback", back_populates="owner")
+    routine_logs = relationship("RoutineLog", back_populates="owner")
+    notifications = relationship("Notification", back_populates="owner")
+
 
 class Analysis(Base):
     __tablename__ = "analyses"
@@ -36,16 +39,48 @@ class Analysis(Base):
     user_id = Column(Integer, ForeignKey("users.id"))
     image_url = Column(String, nullable=True)
     overall_score = Column(Float, nullable=False)
-    
-    # Store scores & predictions as JSON
-    scores_json = Column(JSON, nullable=False)  # {"Acne": 45.0, "Redness": 10.0, ...}
-    concerns_json = Column(JSON, nullable=False) # ["Acne", "Oily Skin"]
-    routine_json = Column(JSON, nullable=False)  # Day and Night routines
-    ingredients_json = Column(JSON, nullable=False) # Key ingredients recommended
-    
+    scores_json = Column(JSON, nullable=False)
+    concerns_json = Column(JSON, nullable=False)
+    routine_json = Column(JSON, nullable=False)
+    ingredients_json = Column(JSON, nullable=False)
     created_at = Column(DateTime, default=datetime.datetime.utcnow)
 
     owner = relationship("User", back_populates="analyses")
+
+
+class RoutineLog(Base):
+    """Daily AM/PM checklist completion for the active analysis cycle."""
+    __tablename__ = "routine_logs"
+    __table_args__ = (
+        UniqueConstraint("user_id", "log_date", "period", name="uq_user_date_period"),
+    )
+
+    id = Column(Integer, primary_key=True, index=True, autoincrement=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    analysis_id = Column(Integer, ForeignKey("analyses.id"), nullable=True)
+    log_date = Column(String, nullable=False)  # YYYY-MM-DD
+    period = Column(String, nullable=False)  # am | pm
+    completed_steps = Column(JSON, default=list)  # [1, 2, 3]
+    created_at = Column(DateTime, default=datetime.datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.datetime.utcnow, onupdate=datetime.datetime.utcnow)
+
+    owner = relationship("User", back_populates="routine_logs")
+
+
+class Notification(Base):
+    __tablename__ = "notifications"
+
+    id = Column(Integer, primary_key=True, index=True, autoincrement=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    title = Column(String, nullable=False)
+    body = Column(Text, nullable=False)
+    type = Column(String, default="info")  # analysis | routine | progress | reminder
+    color = Column(String, default="#6B3A52")
+    is_read = Column(Boolean, default=False)
+    created_at = Column(DateTime, default=datetime.datetime.utcnow)
+
+    owner = relationship("User", back_populates="notifications")
+
 
 class Product(Base):
     __tablename__ = "products"
@@ -53,9 +88,10 @@ class Product(Base):
     id = Column(Integer, primary_key=True, index=True)
     brand = Column(String, nullable=False)
     name = Column(String, nullable=False)
-    category = Column(String, nullable=False)  # Cleanser, Serum, Moisturizer, Sunscreen
-    target_condition = Column(String, nullable=False) # Acne, Dryness, etc.
-    intensity = Column(String, default="harsh") # 'harsh' or 'mild'
+    category = Column(String, nullable=False)
+    target_condition = Column(String, nullable=False)
+    intensity = Column(String, default="harsh")
+
 
 class Ingredient(Base):
     __tablename__ = "ingredients"
@@ -65,6 +101,7 @@ class Ingredient(Base):
     purpose = Column(String, nullable=False)
     suitable_for = Column(String, nullable=False)
 
+
 class Feedback(Base):
     __tablename__ = "feedback"
 
@@ -72,14 +109,15 @@ class Feedback(Base):
     user_id = Column(Integer, ForeignKey("users.id"))
     subject = Column(String, nullable=False)
     message = Column(Text, nullable=False)
-    status = Column(String, default="Open")  # 'Open', 'Resolved'
+    status = Column(String, default="Open")
     created_at = Column(DateTime, default=datetime.datetime.utcnow)
 
     owner = relationship("User", back_populates="feedbacks")
 
-# Initialize tables
+
 def init_db():
     Base.metadata.create_all(bind=engine)
+
 
 def get_db():
     db = SessionLocal()

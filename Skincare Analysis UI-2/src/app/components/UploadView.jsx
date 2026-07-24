@@ -1,7 +1,7 @@
 import { useState, useRef } from "react";
 import { Camera, Sparkles, Check, X } from "lucide-react";
 
-export function UploadView({ onAnalyze }) {
+export function UploadView({ onAnalyze, mode = "first" }) {
   const [selectedFile, setSelectedFile] = useState(null);
   const [previewUrl, setPreviewUrl] = useState(null);
   const [dragging, setDragging] = useState(false);
@@ -56,13 +56,15 @@ export function UploadView({ onAnalyze }) {
     <div className="max-w-lg mx-auto px-4 py-10 sm:py-16">
       <div className="text-center mb-10">
         <span className="inline-flex items-center gap-1.5 bg-secondary text-secondary-foreground px-3 py-1 rounded-full text-xs font-medium mb-5">
-          <Sparkles size={12} /> AI Analysis
+          <Sparkles size={12} /> {mode === "weekly" ? "Weekly check-in" : "First analysis"}
         </span>
         <h1 className="font-display text-4xl sm:text-5xl font-semibold text-foreground leading-tight mb-3">
-          Upload your selfie
+          {mode === "weekly" ? "Time for a new selfie" : "Upload your selfie"}
         </h1>
         <p className="text-muted-foreground leading-relaxed">
-          Take a photo in natural light, no filters. Our AI will do the rest.
+          {mode === "weekly"
+            ? "It has been a week. We will compare your skin, update scores, and refresh your daily routine."
+            : "Take a photo in natural light, no filters. Our AI will build your 7-day routine checklist."}
         </p>
       </div>
 

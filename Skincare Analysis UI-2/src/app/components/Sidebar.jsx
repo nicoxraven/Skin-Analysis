@@ -6,16 +6,21 @@ import { USER_NAV, ADMIN_NAV } from "../lib/constants";
 export function Sidebar({
   user, onLogout, userSection, setUserSection, adminSection, setAdminSection, open, onClose,
 }) {
-  const nav = user.role === "user" ? USER_NAV : ADMIN_NAV;
-  const current = user.role === "user" ? userSection : adminSection;
+  const role = (user.role || "user").toLowerCase();
+  const nav = role === "user" ? USER_NAV : ADMIN_NAV;
   const setSection = (id) => {
-    if (user.role === "user") setUserSection(id);
+    if (role === "user") setUserSection(id);
     else setAdminSection(id);
     onClose();
   };
 
   const isActive = (id) => {
-    if (user.role === "user") return id === "upload" ? (userSection === "upload" || userSection === "analyzing" || userSection === "results") : userSection === id;
+    if ((user.role || "").toLowerCase() === "user") {
+      if (id === "home") {
+        return ["home", "upload", "analyzing", "results"].includes(userSection);
+      }
+      return userSection === id;
+    }
     return adminSection === id;
   };
 
@@ -39,7 +44,7 @@ export function Sidebar({
               <span className="font-display text-xl font-semibold text-foreground">Lumina</span>
             </div>
             <p className="text-[9px] font-mono text-muted-foreground mt-0.5 ml-10 tracking-widest uppercase">
-              {user.role === "admin" ? "Admin Console" : "Skin Intelligence"}
+              {role === "admin" ? "Admin Console" : "Skin Intelligence"}
             </p>
           </div>
           <button onClick={onClose} className="lg:hidden p-1.5 rounded-lg hover:bg-muted text-muted-foreground transition-colors">
@@ -49,8 +54,8 @@ export function Sidebar({
 
         {/* Role badge */}
         <div className="px-4 py-3">
-          <div className={`rounded-xl px-3 py-2 flex items-center gap-2 ${user.role === "admin" ? "bg-primary/8" : "bg-secondary"}`}>
-            {user.role === "admin" ? <Shield size={14} className="text-primary" /> : <UserCircle size={14} className="text-primary" />}
+          <div className={`rounded-xl px-3 py-2 flex items-center gap-2 ${role === "admin" ? "bg-primary/8" : "bg-secondary"}`}>
+            {role === "admin" ? <Shield size={14} className="text-primary" /> : <UserCircle size={14} className="text-primary" />}
             <span className="text-xs font-medium text-foreground capitalize">{user.role} View</span>
           </div>
         </div>

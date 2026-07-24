@@ -72,56 +72,118 @@ export async function saveAnalysis() {
 
 export async function getUserAnalyses(userId) {
   const result = await request(`/api/user/${userId}/progress`);
-  if (!result.ok) return [];
-  return (result.data || []).map((item) => ({
-    date: item.date,
-    score: item.overall_score,
-    imagePreview: null,
-  }));
-}
-
-export async function getAdminStats() {
-  const result = await request("/api/admin/dashboard");
-  if (!result.ok) {
-    return { totalUsers: 0, analysesRun: 0, avgScore: "0.0", openFeedback: 0, recent: [] };
+  if (!result.ok) return { history: [], summary: null };
+  const data = result.data || {};
+  // Support both old array shape and new object shape
+  if (Array.isArray(data)) {
+    return {
+      history: data.map((item) => ({
+        date: item.date,
+        score: item.overall_score ?? item.score,
+        imagePreview: null,
+        skinType: item.skinType,
+      })),
+      summary: null,
+    };
   }
-  const m = result.data.metrics || {};
   return {
-    totalUsers: m.total_users ?? 0,
-    analysesRun: m.total_analyses ?? 0,
-    avgScore: m.avg_score ?? "0.0",
-    openFeedback: m.open_feedback ?? 0,
-    recent: result.data.recent_analyses || [],
+    history: (data.history || []).map((item) => ({
+      id: item.id,
+      date: item.date,
+      score: item.score ?? item.overall_score,
+      imagePreview: null,
+      skinType: item.skinType,
+      scores: item.scores,
+    })),
+    summary: data.summary || null,
   };
 }
 
-export async function getUsers() {
-  const result = await request("/api/admin/users");
+export async function getLatestAnalysis(userId) {
+  const result = await request(`/api/user/${userId}/latest`);
+  if (!result.ok) {
+    return { has_analysis: false, needs_first_scan: true, can_rescan: true, analysis: null };
+  }
+  return result.data;
+}
+
+export async function getTodayRoutine(userId) {
+  const result = await request(`/api/user/${userId}/routine/today`);
+  if (!result.ok) return null;
+  return result.data;
+}
+
+export async function toggleRoutineStep(userId, { period, step, done, analysisId, date }) {
+  return request(`/api/user/${userId}/routine/toggle`, {
+    method: "POST",
+    body: JSON.stringify({
+      period,
+      step,
+      done,
+      analysis_id: analysisId || null,
+      date: date || null,
+    }),
+  });
+}
+
+export async function getNotifications(userId) {
+  const result = await request(`/api/user/${userId}/notifications`);
+  return result.ok ? (result.data || []) : [];
+}
+
+export async function markNotificationRead(userId, notificationId) {
+  return request(`/api/user/${userId}/notifications/${notificationId}/read`, { method: "PATCH" });
+}
+
+export async function markAllNotificationsRead(userId) {
+  return request(`/api/user/${userId}/notifications/read-all`, { method: "PATCH" });
+}
+
+export async function getAdminDashboard(filters = {}) {
+  const params = new URLSearchParams();
+  if (filters.skin_type) params.set("skin_type", filters.skin_type);
+  if (filters.age_min != null && filters.age_min !== "") params.set("age_min", String(filters.age_min));
+  if (filters.age_max != null && filters.age_max !== "") params.set("age_max", String(filters.age_max));
+  const qs = params.toString();
+  const result = await request(`/api/admin/dashboard${qs ? `?${qs}` : ""}`);
+  if (!result.ok) {
+    return {
+      metrics: { total_users: 0, total_analyses: 0, filtered_analyses: 0, avg_score: 0, total_products: 0 },
+      score_distribution: [],
+      by_skin_type: [],
+      by_age_group: [],
+      condition_averages: [],
+      timeline: [],
+      analyses: [],
+    };
+  }
+  return result.data;
+}
+
+/** @deprecated use getAdminDashboard */
+export async function getAdminStats(filters) {
+  const data = await getAdminDashboard(filters);
+  return {
+    totalUsers: data.metrics?.total_users ?? 0,
+    analysesRun: data.metrics?.total_analyses ?? 0,
+    avgScore: data.metrics?.avg_score ?? 0,
+    recent: data.analyses || [],
+    ...data,
+  };
+}
+
+export async function getUsers(q = "") {
+  const result = await request(`/api/admin/users${q ? `?q=${encodeURIComponent(q)}` : ""}`);
   return result.ok ? result.data : [];
 }
 
-export async function getAnalyses() {
-  const result = await request("/api/admin/analyses");
+export async function getAnalyses(q = "") {
+  const result = await request(`/api/admin/analyses${q ? `?q=${encodeURIComponent(q)}` : ""}`);
   return result.ok ? result.data : [];
 }
 
-export async function getConditions() {
-  const result = await request("/api/admin/conditions");
-  return result.ok ? result.data : [];
-}
-
-export async function getIngredients() {
-  const result = await request("/api/admin/ingredients");
-  return result.ok ? result.data : [];
-}
-
-export async function getProducts() {
-  const result = await request("/api/admin/products");
-  return result.ok ? result.data : [];
-}
-
-export async function getFeedback() {
-  const result = await request("/api/admin/feedback");
+export async function getProducts(q = "") {
+  const result = await request(`/api/admin/products${q ? `?q=${encodeURIComponent(q)}` : ""}`);
   return result.ok ? result.data : [];
 }
 
@@ -137,38 +199,18 @@ export async function deleteProduct(id) {
   return request(`/api/admin/products/${id}`, { method: "DELETE" });
 }
 
-export async function createIngredient(payload) {
-  return request("/api/admin/ingredients", { method: "POST", body: JSON.stringify(payload) });
-}
-
-export async function updateIngredient(id, payload) {
-  return request(`/api/admin/ingredients/${id}`, { method: "PUT", body: JSON.stringify(payload) });
-}
-
-export async function deleteIngredient(id) {
-  return request(`/api/admin/ingredients/${id}`, { method: "DELETE" });
-}
-
 export async function deleteUser(id) {
   return request(`/api/admin/users/${id}`, { method: "DELETE" });
 }
 
+export async function updateUser(id, payload) {
+  return request(`/api/admin/users/${id}`, { method: "PATCH", body: JSON.stringify(payload) });
+}
+
 export async function updateUserStatus(id, status) {
-  return request(`/api/admin/users/${id}`, { method: "PATCH", body: JSON.stringify({ status }) });
+  return updateUser(id, { status });
 }
 
 export async function deleteAnalysis(id) {
   return request(`/api/admin/analyses/${id}`, { method: "DELETE" });
-}
-
-export async function updateFeedbackStatus(id, status) {
-  return request(`/api/admin/feedback/${id}`, { method: "PATCH", body: JSON.stringify({ status }) });
-}
-
-export async function deleteFeedback(id) {
-  return request(`/api/admin/feedback/${id}`, { method: "DELETE" });
-}
-
-export async function createFeedback(payload) {
-  return request("/api/admin/feedback", { method: "POST", body: JSON.stringify(payload) });
 }

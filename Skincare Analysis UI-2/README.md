@@ -1,66 +1,39 @@
-# Lumina — Skin Analysis & Care Recommender
+# Lumina — AI Skin Analysis + Database CRUD
 
-School project: AI skin analysis + personalized skincare recommendations + SQLite CRUD admin.
+School project focused on **AI analysis** and **SQLite CRUD**.
 
-## Why the editor was closing
+## What matters
 
-Your machine was low on RAM/disk, and Cursor was indexing:
+| Role | Features |
+|------|----------|
+| **User** | First selfie → AI scores + routine. Daily AM/PM checklist. Weekly rescan. Real progress + notifications. |
+| **Admin** | Dashboard charts (filter by age / skin). Users CRUD. Analyses list/delete. **Products CRUD** (feeds AI recommendations). |
 
-- `backend/myenv/` (~2.6 GB Python venv)
-- `backend/ai/models/*.h5` (~174 MB)
+### Removed on purpose
+- Skin Conditions tab (AI labels are fixed in the model)
+- Ingredients tab (not used by the recommender)
+- Feedback tab (not needed for AI/DB focus)
+- Admin self-registration (admin is seeded only)
 
-Those are now excluded via `.cursorignore`. **Reload the Cursor window** after opening this folder.
+### Why Products stay
+`backend/ai/recommender.py` queries the `products` table by `target_condition`, `intensity`, and `category` to build day/night routines. Admin product CRUD changes what users get recommended.
 
-Also open the inner project folder (`Skincare Analysis UI-2`), not the parent wrapper folder.
-
-## Do I need `src/services/ai.js` and `api.js`?
-
-**Yes.**
-
-| File | Role |
-|------|------|
-| `api.js` | Auth + Database CRUD calls to FastAPI (`/api/auth/*`, `/api/admin/*`, progress) |
-| `ai.js` | Sends selfie to `/api/user/analyze` and maps AI JSON for the UI |
-
-Without them the frontend cannot talk to the backend.
-
-## Run the project
-
-### 1) Backend (terminal A)
+## Run
 
 ```bash
+# Backend
 cd backend
-source myenv/bin/activate   # or: python3 -m venv myenv && pip install ...
-python seed.py              # first time only — products & ingredients
+source myenv/bin/activate
+python seed.py   # products catalog (first time)
 uvicorn main:app --reload --port 8000
-```
 
-### 2) Frontend (terminal B)
-
-```bash
+# Frontend
+cd ..
 npm install
 npm run dev
 ```
 
-Open the URL Vite prints (usually http://localhost:5173).
-
-### Demo accounts
-
-| Role  | Email              | Password    |
-|-------|--------------------|-------------|
-| User  | demo@example.com   | password123 |
-| Admin | admin@lumina.com   | admin123    |
-
-Admin register secret code: `admin123`
-
-## Project map
-
-```
-src/app/App.jsx              # shell / routing between views
-src/app/components/          # Login, Upload, Results, Admin pages
-src/services/api.js          # CRUD + auth
-src/services/ai.js           # AI analyze bridge
-backend/main.py              # FastAPI routes
-backend/database.py          # SQLAlchemy models (SQLite)
-backend/ai/predict.py        # model inference + recommender
-```
+| Account | Email | Password |
+|---------|-------|----------|
+| User | demo@example.com | password123 |
+| Admin | admin@lumina.com | admin123 |
