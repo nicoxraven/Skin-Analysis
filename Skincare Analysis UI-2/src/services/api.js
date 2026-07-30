@@ -1,4 +1,4 @@
-const API_BASE = "http://localhost:8000";
+const API_BASE = `http://${window.location.hostname}:8000`;
 
 async function request(path, options = {}) {
   try {
@@ -209,6 +209,14 @@ export async function updateUser(id, payload) {
 
 export async function updateUserStatus(id, status) {
   return updateUser(id, { status });
+}
+
+export async function forceRescan(id) {
+  return request(`/api/admin/users/${id}/force_rescan`, { method: "POST" });
+}
+
+export async function userForceRescan(userId) {
+  return request(`/api/user/${userId}/force_rescan`, { method: "POST" });
 }
 
 export async function deleteAnalysis(id) {

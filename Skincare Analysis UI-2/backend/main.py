@@ -348,6 +348,7 @@ async def user_analyze_skin(
     )
     previous_scores = latest.scores_json if latest else None
     is_first = latest is None
+    is_force_rescan = bool(user.force_rescan)
     is_weekly = False
     if latest and latest.created_at:
         days = (datetime.datetime.utcnow() - latest.created_at).days
@@ -365,7 +366,14 @@ async def user_analyze_skin(
             raise HTTPException(status_code=400, detail=ai_res.get("message"))
 
         scores = ai_res["scores"]
-        overall_health_score = round(100.0 - (sum(scores.values()) / len(scores)), 1)
+        # Weighted score: dominant condition has 60% weight, avg has 40%
+        # This ensures different selfies with different dominant conditions
+        # produce meaningfully different scores instead of always ~80.
+        score_values = list(scores.values())
+        avg_score = sum(score_values) / len(score_values)
+        dominant_score = max(score_values)
+        raw_severity = dominant_score * 0.6 + avg_score * 0.4
+        overall_health_score = round(max(0.0, min(100.0, 100.0 - raw_severity)), 1)
         rec = ai_res["recommendation"]
 
         new_scan = Analysis(
@@ -384,6 +392,7 @@ async def user_analyze_skin(
 
         dominant_condition = max(scores, key=scores.get)
         user.detected_skin_type = dominant_condition
+        user.force_rescan = False
 
         if is_first:
             add_notification(
@@ -392,6 +401,17 @@ async def user_analyze_skin(
                 f"Your first skin score is {overall_health_score}. Check your daily AM/PM routine checklist.",
                 "analysis",
                 "#6B3A52",
+            )
+        elif is_force_rescan and previous_scores is not None:
+            prev = latest.overall_score if latest else overall_health_score
+            delta = round(overall_health_score - prev, 1)
+            direction = "up" if delta >= 0 else "down"
+            add_notification(
+                db, user.id,
+                "Force scan complete",
+                f"New score {overall_health_score} ({direction} {abs(delta)} pts). Your routine has been refreshed and the 7-day timer restarted.",
+                "analysis",
+                "#7A9E87" if delta >= 0 else "#C4859A",
             )
         elif is_weekly and previous_scores is not None:
             prev = latest.overall_score if latest else overall_health_score
@@ -449,10 +469,20 @@ def get_latest_analysis(user_id: int, db: Session = Depends(get_db)):
         }
 
     payload = analysis_ui_payload(scan)
+    streak = compute_streak(db, user_id)
+    days_until = max(0, RESCAN_DAYS - max(payload["days_since"], streak))
+    if user.force_rescan:
+        payload["can_rescan"] = True
+        payload["days_until_rescan"] = 0
+    else:
+        payload["can_rescan"] = days_until <= 0
+        payload["days_until_rescan"] = days_until
+
     return {
         "has_analysis": True,
         "needs_first_scan": False,
         "can_rescan": payload["can_rescan"],
+        "force_rescan": bool(user.force_rescan),
         "days_until_rescan": payload["days_until_rescan"],
         "days_since": payload["days_since"],
         "analysis": payload,
@@ -494,12 +524,20 @@ def get_user_progress(user_id: int, db: Session = Depends(get_db)):
     # 7 days * 2 periods = 14 possible
     adherence = round((periods_logged / 14) * 100, 1) if periods_logged else 0.0
 
+    streak_days = compute_streak(db, user_id)
     latest = history[-1] if history else None
     days_since = 0
     days_until = RESCAN_DAYS
     if scans:
         days_since = (datetime.datetime.utcnow() - scans[-1].created_at).days
-        days_until = max(0, RESCAN_DAYS - days_since)
+        days_until = max(0, RESCAN_DAYS - max(days_since, streak_days))
+
+    user = db.query(User).filter(User.id == user_id).first()
+    if user and user.force_rescan:
+        can_rescan_flag = True
+        days_until = 0
+    else:
+        can_rescan_flag = days_until <= 0 if scans else True
 
     return {
         "history": history,
@@ -509,10 +547,10 @@ def get_user_progress(user_id: int, db: Session = Depends(get_db)):
             "gain": gain,
             "scan_count": len(history),
             "routine_adherence_7d": adherence,
-            "streak_days": compute_streak(db, user_id),
+            "streak_days": streak_days,
             "days_since_last_scan": days_since,
             "days_until_rescan": days_until,
-            "can_rescan": days_since >= RESCAN_DAYS if scans else True,
+            "can_rescan": can_rescan_flag,
             "skin_type": latest["skinType"] if latest else "Pending Scan",
         },
     }
@@ -531,6 +569,17 @@ def get_today_routine(user_id: int, date: Optional[str] = None, db: Session = De
         return {"date": log_date, "am": [], "pm": [], "am_done": [], "pm_done": [], "analysis_id": None}
 
     ui = analysis_ui_payload(scan)
+    streak = compute_streak(db, user_id)
+    days_until = max(0, RESCAN_DAYS - max(ui["days_since"], streak))
+    
+    user = db.query(User).filter(User.id == user_id).first()
+    if user and user.force_rescan:
+        ui["days_until_rescan"] = 0
+        ui["can_rescan"] = True
+    else:
+        ui["days_until_rescan"] = days_until
+        ui["can_rescan"] = days_until <= 0
+
     logs = (
         db.query(RoutineLog)
         .filter(
@@ -669,6 +718,24 @@ def mark_all_notifications_read(user_id: int, db: Session = Depends(get_db)):
         Notification.user_id == user_id,
         Notification.is_read == False,  # noqa: E712
     ).update({"is_read": True})
+    db.commit()
+    return {"success": True}
+
+
+@app.post("/api/user/{user_id}/force_rescan")
+def user_force_rescan(user_id: int, db: Session = Depends(get_db)):
+    """User-initiated force rescan — enables rescan and resets timer on next upload."""
+    user = db.query(User).filter(User.id == user_id).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    user.force_rescan = True
+    add_notification(
+        db, user.id,
+        "Force scan enabled",
+        "Upload a new selfie to get updated analysis and a refreshed routine.",
+        "reminder",
+        "#6B8EAF",
+    )
     db.commit()
     return {"success": True}
 
@@ -868,6 +935,15 @@ def get_admin_users(q: Optional[str] = None, db: Session = Depends(get_db)):
     return rows
 
 
+@app.post("/api/admin/users/{user_id}/force_rescan")
+def admin_force_rescan(user_id: int, db: Session = Depends(get_db)):
+    user = db.query(User).filter(User.id == user_id).first()
+    if user:
+        user.force_rescan = True
+        db.commit()
+    return {"success": True}
+
+
 @app.patch("/api/admin/users/{user_id}")
 def update_user(user_id: int, payload: UserUpdate, db: Session = Depends(get_db)):
     user = db.query(User).filter(User.id == user_id).first()
@@ -896,6 +972,30 @@ def delete_user(user_id: int, db: Session = Depends(get_db)):
     db.delete(user)
     db.commit()
     return {"success": True}
+
+
+@app.post("/api/admin/users/{user_id}/reset-rescan")
+def admin_reset_rescan(user_id: int, db: Session = Depends(get_db)):
+    """
+    Testing/Demo only: backdates the user's latest analysis by 8 days,
+    making can_rescan=True so teachers can demo a fresh upload right away.
+    The 7-day cycle logic is unchanged — this just simulates time passing.
+    """
+    user = db.query(User).filter(User.id == user_id).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    latest = (
+        db.query(Analysis)
+        .filter(Analysis.user_id == user_id)
+        .order_by(Analysis.created_at.desc())
+        .first()
+    )
+    if not latest:
+        raise HTTPException(status_code=404, detail="User has no analyses to reset")
+    # Backdate by 8 days so the 7-day gate opens immediately
+    latest.created_at = datetime.datetime.utcnow() - datetime.timedelta(days=8)
+    db.commit()
+    return {"success": True, "message": f"Rescan timer reset for {user.name}. They can now upload a new selfie."}
 
 
 @app.get("/api/admin/analyses")

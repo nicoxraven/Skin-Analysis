@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { Key, Camera } from "lucide-react";
 import { Badge } from "../Badge";
 import { AdminHeader } from "../AdminHeader";
 import { DataTable } from "../DataTable";
@@ -53,14 +54,10 @@ export function AdminUsers() {
       alert("Admin accounts are managed in the database seed only.");
       return;
     }
-    const name = prompt("Name:", row.name);
-    if (name == null) return;
-    const ageStr = prompt("Age:", String(row.age ?? ""));
-    if (ageStr == null) return;
-    const age = ageStr === "" ? null : Number(ageStr);
-    const res = await updateUser(row.id, { name, age: Number.isFinite(age) ? age : null });
-    if (res.ok) load();
-    else alert(res.error || "Update failed");
+    if (!confirm(`Reset password for ${row.name} to 'password123'?`)) return;
+    const res = await updateUser(row.id, { password: "password123" });
+    if (res.ok) alert(`Password for ${row.name} has been reset.`);
+    else alert(res.error || "Password reset failed");
   };
 
   const handleDelete = async (row) => {
@@ -74,6 +71,14 @@ export function AdminUsers() {
     else alert(res.error || "Delete failed");
   };
 
+  // const handleForceRescan = async (row) => {
+  //   if (row.role === "admin") return;
+  //   if (!confirm(`Allow ${row.name} to upload a new selfie immediately (Forces Rescan)?`)) return;
+  //   const res = await forceRescan(row.id);
+  //   if (res.ok) alert(`Success! ${row.name} can now upload a new selfie.`);
+  //   else alert(res.error || "Failed to force rescan");
+  // };
+
   return (
     <div>
       <AdminHeader
@@ -85,7 +90,7 @@ export function AdminUsers() {
         searchPlaceholder="Search name, email, skin, status…"
       />
       <div className="bg-card border border-border rounded-2xl overflow-hidden">
-        <DataTable columns={cols} data={users} onEdit={handleEdit} onDelete={handleDelete} />
+        <DataTable columns={cols} data={users} onEdit={handleEdit} editIcon={Key} editTitle="Reset Password" /*onExtraAction={handleForceRescan}*/ extraIcon={Camera} extraTitle="Allow New Rescan" onDelete={handleDelete} />
       </div>
     </div>
   );

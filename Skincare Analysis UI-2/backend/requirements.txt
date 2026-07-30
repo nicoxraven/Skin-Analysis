@@ -1,0 +1,8 @@
+fastapi==0.139.2
+uvicorn[standard]==0.30.0
+mediapipe==0.10.35
+numpy==2.5.1
+opencv-contrib-python==5.0.0.93
+pydantic==2.13.4
+SQLAlchemy==2.0.51
+tensorflow==2.21.0

@@ -1,6 +1,6 @@
-import { Edit, Trash2 } from "lucide-react";
+import { Edit, Trash2, Key } from "lucide-react";
 
-export function DataTable({ columns, data, onDelete, onEdit }) {
+export function DataTable({ columns, data, onDelete, onEdit, editIcon: EditIcon = Edit, editTitle = "Edit", onExtraAction, extraIcon: ExtraIcon, extraTitle }) {
   return (
     <div className="overflow-x-auto">
       <table className="w-full text-sm min-w-[640px]">
@@ -11,7 +11,7 @@ export function DataTable({ columns, data, onDelete, onEdit }) {
                 {col.label}
               </th>
             ))}
-            {(onDelete || onEdit) && (
+            {(onDelete || onEdit || onExtraAction) && (
               <th className="py-3 px-4 text-right font-mono text-xs text-muted-foreground tracking-widest uppercase">Actions</th>
             )}
           </tr>
@@ -22,12 +22,17 @@ export function DataTable({ columns, data, onDelete, onEdit }) {
               {columns.map((col) => (
                 <td key={col.key} className="py-3.5 px-4">{col.render ? col.render(row[col.key], row) : row[col.key]}</td>
               ))}
-              {(onDelete || onEdit) && (
+              {(onDelete || onEdit || onExtraAction) && (
                 <td className="py-3.5 px-4">
                   <div className="flex items-center justify-end gap-1 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity">
+                    {onExtraAction && ExtraIcon && (
+                      <button type="button" onClick={() => onExtraAction(row)} className="p-1.5 rounded-lg hover:bg-muted text-muted-foreground hover:text-foreground transition-colors" title={extraTitle}>
+                        <ExtraIcon size={13} />
+                      </button>
+                    )}
                     {onEdit && (
-                      <button type="button" onClick={() => onEdit(row)} className="p-1.5 rounded-lg hover:bg-muted text-muted-foreground hover:text-foreground transition-colors" title="Edit">
-                        <Edit size={13} />
+                      <button type="button" onClick={() => onEdit(row)} className="p-1.5 rounded-lg hover:bg-muted text-muted-foreground hover:text-foreground transition-colors" title={editTitle}>
+                        <EditIcon size={13} />
                       </button>
                     )}
                     {onDelete && (

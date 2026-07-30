@@ -1,28 +1,82 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import {
   CheckCircle2, TrendingUp, ChevronRight, AlertCircle,
-  Leaf, Sun, Moon, Camera, Check,
+  Leaf, Sun, Moon, Camera, Check, CalendarDays,
+  AlertTriangle, FlaskConical, Droplets, Sparkles,
+  ShieldCheck, ShoppingBag, PackageCheck,
 } from "lucide-react";
 import { Badge } from "./Badge";
 import { ScoreRing } from "./ScoreRing";
 import { scoreLabel } from "../lib/helpers";
 import { getTodayRoutine, toggleRoutineStep } from "../../services/api";
+import { ProductPickerPanel } from "./ProductPickerPanel";
+
+// ── Helpers ──────────────────────────────────────────────────────────────────
+
+function getUserProducts(userId) {
+  try {
+    return JSON.parse(localStorage.getItem(`user_products_${userId}`) || "[]");
+  } catch {
+    return [];
+  }
+}
+
+function saveUserProducts(userId, ids) {
+  localStorage.setItem(`user_products_${userId}`, JSON.stringify(ids));
+}
+
+function hasSeenProductQuestion(userId) {
+  return localStorage.getItem(`products_question_seen_${userId}`) === "1";
+}
+
+function markProductQuestionSeen(userId) {
+  localStorage.setItem(`products_question_seen_${userId}`, "1");
+}
+
+// Map routine step names / notes to a Lucide icon and a category label
+function resolveStepMeta(step) {
+  const text = `${step.product || ""} ${step.note || ""}`.toLowerCase();
+  if (/cleanser|clean|wash|foam/.test(text))
+    return { Icon: Droplets, label: "Cleanser", color: "#6B8EAF" };
+  if (/toner|essence|mist/.test(text))
+    return { Icon: Droplets, label: "Toner / Essence", color: "#7A9E87" };
+  if (/serum|treatment|retinol|bha|aha|vitamin c|niacinamide|acid/.test(text))
+    return { Icon: Sparkles, label: "Treatment / Serum", color: "#A67856" };
+  if (/moisturizer|moisturising|cream|lotion|gel|snail|barrier/.test(text))
+    return { Icon: ShieldCheck, label: "Moisturizer", color: "#7A9E87" };
+  if (/sunscreen|spf|sun/.test(text))
+    return { Icon: Sun, label: "Sunscreen", color: "#D4A843" };
+  if (/sleeping mask|night mask|mask/.test(text))
+    return { Icon: Moon, label: "Night Mask", color: "#6B3A52" };
+  return { Icon: Leaf, label: "Skincare", color: "#8C7B75" };
+}
+
+// ── Main component ───────────────────────────────────────────────────────────
 
 export function ResultsView({
   analysis,
   userId,
   onProgress,
   onWeeklyRescan,
+  onForceRescan,
   canRescan = false,
   daysUntilRescan = 7,
+  isForceRescan = false,
 }) {
   const [tab, setTab] = useState("routine");
   const [time, setTime] = useState("am");
   const [amDone, setAmDone] = useState([]);
   const [pmDone, setPmDone] = useState([]);
   const [savingStep, setSavingStep] = useState(null);
+
+  // "My Products" question state
+  const [showProductQ, setShowProductQ] = useState(false);
+  const [showPicker, setShowPicker] = useState(false);
+  const [myProducts, setMyProducts] = useState([]);
+
   const { label, color } = scoreLabel(analysis?.score ?? 0);
 
+  // Load today's routine toggle state
   useEffect(() => {
     if (!userId) return;
     let cancelled = false;
@@ -34,6 +88,13 @@ export function ResultsView({
     return () => { cancelled = true; };
   }, [userId, analysis?.analysis_id]);
 
+  // Show product question once per user
+  useEffect(() => {
+    if (!userId) return;
+    setShowProductQ(!hasSeenProductQuestion(userId));
+    setMyProducts(getUserProducts(userId));
+  }, [userId]);
+
   const steps = time === "am" ? (analysis?.amRoutine || []) : (analysis?.pmRoutine || []);
   const doneList = time === "am" ? amDone : pmDone;
   const doneCount = steps.filter((s) => doneList.includes(s.step)).length;
@@ -41,13 +102,11 @@ export function ResultsView({
   const handleToggle = async (stepNum) => {
     const isDone = doneList.includes(stepNum);
     const nextDone = !isDone;
-    // optimistic UI
     const updater = (prev) => (
       nextDone ? [...new Set([...prev, stepNum])] : prev.filter((s) => s !== stepNum)
     );
     if (time === "am") setAmDone(updater);
     else setPmDone(updater);
-
     setSavingStep(stepNum);
     const res = await toggleRoutineStep(userId, {
       period: time,
@@ -57,15 +116,22 @@ export function ResultsView({
     });
     setSavingStep(null);
     if (!res.ok) {
-      // rollback
-      if (time === "am") setAmDone((prev) => (
-        isDone ? [...new Set([...prev, stepNum])] : prev.filter((s) => s !== stepNum)
-      ));
-      else setPmDone((prev) => (
-        isDone ? [...new Set([...prev, stepNum])] : prev.filter((s) => s !== stepNum)
-      ));
+      if (time === "am") setAmDone((prev) => (isDone ? [...new Set([...prev, stepNum])] : prev.filter((s) => s !== stepNum)));
+      else setPmDone((prev) => (isDone ? [...new Set([...prev, stepNum])] : prev.filter((s) => s !== stepNum)));
       alert(res.error || "Could not save checklist");
     }
+  };
+
+  const handleProductsDone = useCallback((selectedIds) => {
+    saveUserProducts(userId, selectedIds);
+    markProductQuestionSeen(userId);
+    setMyProducts(selectedIds.map(String));
+    setShowProductQ(false);
+  }, [userId]);
+
+  const handleSkipProductQ = () => {
+    markProductQuestionSeen(userId);
+    setShowProductQ(false);
   };
 
   if (!analysis) {
@@ -76,8 +142,16 @@ export function ResultsView({
     );
   }
 
+  // Tab definitions with Lucide icons
+  const TABS = [
+    { id: "routine", label: "Routine", Icon: CalendarDays },
+    { id: "concerns", label: "Concerns", Icon: AlertTriangle },
+    { id: "ingredients", label: "Ingredients", Icon: FlaskConical },
+  ];
+
   return (
     <div className="max-w-2xl mx-auto px-4 py-8">
+      {/* Header */}
       <div className="flex items-start justify-between mb-6 gap-3">
         <div>
           <h1 className="font-display text-2xl sm:text-3xl font-semibold text-foreground">Your Skin Plan</h1>
@@ -88,27 +162,41 @@ export function ResultsView({
             )}
           </p>
         </div>
-        {canRescan ? (
-          <button
-            type="button"
-            onClick={onWeeklyRescan}
-            className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold flex-shrink-0 bg-primary text-primary-foreground hover:opacity-90"
-          >
-            <Camera size={15} /> Weekly check-in
-          </button>
-        ) : (
-          <span className="flex items-center gap-1.5 text-xs text-emerald-700 bg-emerald-50 border border-emerald-200 px-3 py-1.5 rounded-xl">
-            <CheckCircle2 size={13} /> Active plan
-          </span>
-        )}
+        <div className="flex flex-col gap-2 items-end flex-shrink-0">
+          {canRescan ? (
+            <button
+              type="button"
+              onClick={isForceRescan ? onForceRescan : onWeeklyRescan}
+              className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold bg-primary text-primary-foreground hover:opacity-90"
+            >
+              <Camera size={15} /> {isForceRescan ? "Rescan now" : "Weekly check-in"}
+            </button>
+          ) : (
+            <>
+              <span className="flex items-center gap-1.5 text-xs text-emerald-700 bg-emerald-50 border border-emerald-200 px-3 py-1.5 rounded-xl">
+                <CheckCircle2 size={13} /> Active plan
+              </span>
+              <button
+                type="button"
+                onClick={onForceRescan}
+                className="flex items-center gap-1.5 text-xs font-medium text-primary hover:opacity-80 transition-opacity bg-primary/5 px-3 py-1.5 rounded-lg border border-primary/10"
+              >
+                <Camera size={12} /> Request new scan
+              </button>
+            </>
+          )}
+        </div>
       </div>
 
       {canRescan && (
         <div className="mb-4 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
-          It has been a week since your last selfie. Upload a new photo to refresh your scores and routine.
+          {isForceRescan
+            ? "A rescan has been requested. Upload a new selfie to refresh your scores, routine, and restart the 7-day timer."
+            : "It has been a week since your last selfie. Upload a new photo to refresh your scores and routine."}
         </div>
       )}
 
+      {/* Score card */}
       <div className="bg-card border border-border rounded-2xl p-6 mb-4 flex flex-col sm:flex-row items-center gap-6">
         <div className="flex flex-col items-center gap-4">
           <ScoreRing score={analysis.score} />
@@ -134,22 +222,74 @@ export function ResultsView({
         </div>
       </div>
 
+      {/* ── "My products" question banner ── */}
+      {showProductQ && (
+        <div className="mb-4 bg-card border border-border rounded-2xl p-5">
+          <div className="flex items-start gap-3">
+            <div className="w-9 h-9 rounded-xl bg-primary/10 flex items-center justify-center flex-shrink-0">
+              <ShoppingBag size={16} className="text-primary" />
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-semibold text-foreground mb-0.5">Do you currently use any products?</p>
+              <p className="text-xs text-muted-foreground leading-relaxed mb-3">
+                Tell us what you already own or have been recommended — we'll highlight them in your routine.
+              </p>
+              <div className="flex gap-2 flex-wrap">
+                <button
+                  type="button"
+                  onClick={() => setShowPicker(true)}
+                  className="flex items-center gap-1.5 text-sm font-semibold px-4 py-2 rounded-xl bg-primary text-primary-foreground hover:opacity-90 transition-opacity"
+                >
+                  <PackageCheck size={14} /> Yes, pick my products
+                </button>
+                <button
+                  type="button"
+                  onClick={handleSkipProductQ}
+                  className="text-sm px-4 py-2 rounded-xl border border-border hover:bg-muted transition-colors"
+                >
+                  No, show my routine
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Quick "manage products" button always available after question is dismissed */}
+      {!showProductQ && (
+        <button
+          type="button"
+          onClick={() => setShowPicker(true)}
+          className="mb-4 flex items-center gap-2 text-xs font-medium text-primary hover:opacity-80 transition-opacity bg-primary/5 px-3 py-1.5 rounded-lg border border-primary/10 w-fit"
+        >
+          <PackageCheck size={13} />
+          {myProducts.length > 0
+            ? `${myProducts.length} product${myProducts.length > 1 ? "s" : ""} selected · manage`
+            : "Update My Products"}
+        </button>
+      )}
+
+      {/* ── Tab panel ── */}
       <div className="bg-card border border-border rounded-2xl overflow-hidden">
         <div className="flex border-b border-border">
-          {["routine", "concerns", "ingredients"].map((t) => (
+          {TABS.map(({ id, label: tLabel, Icon }) => (
             <button
-              key={t}
+              key={id}
               type="button"
-              onClick={() => setTab(t)}
-              className={`flex-1 py-3 text-sm font-medium capitalize transition-colors
-                ${tab === t ? "text-primary border-b-2 border-primary" : "text-muted-foreground hover:text-foreground"}`}
+              onClick={() => setTab(id)}
+              className={`flex-1 flex items-center justify-center gap-1.5 py-3 text-sm font-medium transition-colors ${tab === id
+                ? "text-primary border-b-2 border-primary"
+                : "text-muted-foreground hover:text-foreground"
+                }`}
             >
-              {t}
+              <Icon size={13} />
+              {tLabel}
             </button>
           ))}
         </div>
 
         <div className="p-5">
+          {/* ── Concerns tab ── */}
           {tab === "concerns" && (
             <div className="space-y-3">
               {(analysis.concerns || []).length === 0 && (
@@ -175,6 +315,7 @@ export function ResultsView({
             </div>
           )}
 
+          {/* ── Ingredients tab ── */}
           {tab === "ingredients" && (
             <div className="space-y-3">
               {(analysis.ingredients || []).map((ing) => (
@@ -195,63 +336,109 @@ export function ResultsView({
             </div>
           )}
 
+          {/* ── Routine tab ── */}
           {tab === "routine" && (
             <div>
-              <div className="flex items-center justify-between mb-4 gap-3 flex-wrap">
+              {/* AM / PM toggle */}
+              <div className="flex items-center justify-between mb-5 gap-3 flex-wrap">
                 <div className="flex bg-muted rounded-xl p-1 w-fit">
-                  {["am", "pm"].map((t) => (
+                  {[
+                    { id: "am", Icon: Sun, label: "Morning" },
+                    { id: "pm", Icon: Moon, label: "Evening" },
+                  ].map(({ id, Icon, label: tLabel }) => (
                     <button
-                      key={t}
+                      key={id}
                       type="button"
-                      onClick={() => setTime(t)}
-                      className={`flex items-center gap-1.5 px-4 py-2 rounded-lg text-xs font-medium transition-all
-                        ${time === t ? "bg-card text-foreground shadow-sm" : "text-muted-foreground"}`}
+                      onClick={() => setTime(id)}
+                      className={`flex items-center gap-1.5 px-4 py-2 rounded-lg text-xs font-medium transition-all ${time === id ? "bg-card text-foreground shadow-sm" : "text-muted-foreground"
+                        }`}
                     >
-                      {t === "am" ? <><Sun size={12} /> Morning</> : <><Moon size={12} /> Evening</>}
+                      <Icon size={12} /> {tLabel}
                     </button>
                   ))}
                 </div>
                 <p className="text-xs font-mono text-muted-foreground">
-                  Today · {doneCount}/{steps.length} done
+                  {doneCount}/{steps.length} done today
                 </p>
               </div>
 
-              <div className="w-full bg-muted rounded-full h-1.5 mb-4">
+              {/* Progress bar */}
+              <div className="w-full bg-muted rounded-full h-1 mb-5">
                 <div
-                  className="bg-primary h-1.5 rounded-full transition-all"
-                  style={{ width: `${steps.length ? (doneCount / steps.length) * 100 : 0}%` }}
+                  className="h-1 rounded-full transition-all duration-500"
+                  style={{
+                    width: `${steps.length ? (doneCount / steps.length) * 100 : 0}%`,
+                    background: "linear-gradient(90deg, #6B3A52, #C4859A)",
+                  }}
                 />
               </div>
 
-              <div className="space-y-2">
+              {/* Step cards */}
+              <div className="space-y-2.5">
                 {steps.length === 0 && (
                   <p className="text-sm text-muted-foreground text-center py-6">No routine steps yet.</p>
                 )}
                 {steps.map((step) => {
                   const checked = doneList.includes(step.step);
                   const busy = savingStep === step.step;
+                  const { Icon, label: catLabel, color: iconColor } = resolveStepMeta(step);
+                  // Check if user already owns a matching product
+                  const owned = myProducts.length > 0 &&
+                    (step.productId ? myProducts.includes(String(step.productId)) : false);
+
                   return (
                     <button
                       key={step.step}
                       type="button"
                       disabled={busy}
                       onClick={() => handleToggle(step.step)}
-                      className={`w-full flex items-center gap-3 px-3 py-3.5 rounded-xl border text-left transition-colors
-                        ${checked ? "border-emerald-200 bg-emerald-50/70" : "border-border hover:bg-secondary/30"}`}
+                      className={`w-full flex items-center gap-3 px-4 py-3.5 rounded-xl border text-left transition-all duration-200 ${checked
+                        ? "border-emerald-200 bg-emerald-50/70"
+                        : "border-border hover:bg-secondary/20 hover:border-border/80"
+                        }`}
+                      style={{
+                        borderLeft: `3px solid ${checked ? "#10b981" : iconColor}`,
+                      }}
                     >
-                      <span
-                        className={`w-6 h-6 rounded-md border flex items-center justify-center flex-shrink-0 transition-colors
-                          ${checked ? "bg-emerald-500 border-emerald-500 text-white" : "border-border bg-card text-transparent"}`}
+                      {/* Category icon */}
+                      <div
+                        className="w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0"
+                        style={{
+                          background: checked
+                            ? "rgba(16,185,129,0.1)"
+                            : `${iconColor}18`,
+                        }}
                       >
-                        <Check size={14} strokeWidth={3} />
-                      </span>
-                      <div className="flex-1 min-w-0">
-                        <p className={`text-sm font-medium ${checked ? "text-emerald-900 line-through decoration-emerald-400/80" : "text-foreground"}`}>
-                          {step.product}
-                        </p>
-                        <p className="text-xs text-muted-foreground">{step.note}</p>
+                        <Icon
+                          size={15}
+                          style={{ color: checked ? "#10b981" : iconColor }}
+                        />
                       </div>
-                      <span className="text-[10px] font-mono text-muted-foreground">#{step.step}</span>
+
+                      {/* Step info */}
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <p className={`text-sm font-medium ${checked ? "text-emerald-900 line-through decoration-emerald-400/60" : "text-foreground"}`}>
+                            {step.product}
+                          </p>
+                          {owned && (
+                            <span className="inline-flex items-center gap-1 text-[10px] font-medium px-1.5 py-0.5 rounded-full bg-emerald-100 text-emerald-700">
+                              <Check size={9} strokeWidth={3} /> You own this
+                            </span>
+                          )}
+                        </div>
+                        <p className="text-xs text-muted-foreground mt-0.5">{catLabel} · {step.note}</p>
+                      </div>
+
+                      {/* Checkbox */}
+                      <span
+                        className={`w-5 h-5 rounded-md border flex items-center justify-center flex-shrink-0 transition-all ${checked
+                          ? "bg-emerald-500 border-emerald-500 text-white"
+                          : "border-border bg-card"
+                          }`}
+                      >
+                        {checked && <Check size={11} strokeWidth={3} />}
+                      </span>
                     </button>
                   );
                 })}
@@ -260,6 +447,16 @@ export function ResultsView({
           )}
         </div>
       </div>
+
+      {/* Product Picker modal */}
+      {showPicker && (
+        <ProductPickerPanel
+          userId={userId}
+          preSelected={myProducts}
+          onDone={handleProductsDone}
+          onClose={() => setShowPicker(false)}
+        />
+      )}
     </div>
   );
 }

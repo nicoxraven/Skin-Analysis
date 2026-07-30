@@ -24,6 +24,7 @@ class User(Base):
     detected_skin_type = Column(String, default="Pending Scan")
     age = Column(Integer, nullable=True)
     status = Column(String, default="Active")
+    force_rescan = Column(Boolean, default=False)
     created_at = Column(DateTime, default=datetime.datetime.utcnow)
 
     analyses = relationship("Analysis", back_populates="owner")

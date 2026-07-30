@@ -4,6 +4,7 @@ import {
   getUserAnalyses,
   getLatestAnalysis,
   getNotifications,
+  userForceRescan,
 } from "../services/api";
 import { LoginPage } from "./components/LoginPage";
 import { UploadView } from "./components/UploadView";
@@ -18,7 +19,15 @@ import { AdminAnalyses } from "./components/admin/AdminAnalyses";
 import { AdminProducts } from "./components/admin/AdminProducts";
 
 export default function App() {
-  const [user, setUser] = useState(null);
+  // Restore session from localStorage so refresh doesn't log out
+  const [user, setUser] = useState(() => {
+    try {
+      const saved = localStorage.getItem("lumina_user");
+      return saved ? JSON.parse(saved) : null;
+    } catch {
+      return null;
+    }
+  });
   const [userSection, setUserSection] = useState("home");
   const [adminSection, setAdminSection] = useState("dashboard");
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -30,6 +39,7 @@ export default function App() {
   const [uploadMode, setUploadMode] = useState("first"); // first | weekly
   const [currentAnalysis, setCurrentAnalysis] = useState(null);
   const [canRescan, setCanRescan] = useState(true);
+  const [isForceRescan, setIsForceRescan] = useState(false);
   const [daysUntilRescan, setDaysUntilRescan] = useState(7);
   const [userHistory, setUserHistory] = useState([]);
   const [progressSummary, setProgressSummary] = useState(null);
@@ -51,11 +61,13 @@ export default function App() {
     if (latest?.has_analysis && latest.analysis) {
       setCurrentAnalysis(latest.analysis);
       setCanRescan(!!latest.can_rescan);
+      setIsForceRescan(!!latest.force_rescan);
       setDaysUntilRescan(latest.days_until_rescan ?? 0);
       return latest;
     }
     setCurrentAnalysis(null);
     setCanRescan(true);
+    setIsForceRescan(false);
     setDaysUntilRescan(0);
     return latest;
   }, []);
@@ -92,8 +104,18 @@ export default function App() {
     return () => document.removeEventListener("mousedown", handler);
   }, []);
 
+  const handleLogin = (u) => {
+    setUser(u);
+    try { localStorage.setItem("lumina_user", JSON.stringify(u)); } catch { /* ignore */ }
+  };
+
+  const handleLogout = () => {
+    setUser(null);
+    try { localStorage.removeItem("lumina_user"); } catch { /* ignore */ }
+  };
+
   // Sidebar "My Skin" / home routing
-  const handleSetUserSection = (id) => {
+  const handleSetUserSection = async (id) => {
     if (id === "home") {
       if (!currentAnalysis) {
         setUploadMode("first");
@@ -102,6 +124,10 @@ export default function App() {
         setUserSection("home");
       }
       return;
+    }
+    // Refresh progress live whenever the user navigates to that tab
+    if (id === "progress" && user?.id) {
+      await refreshProgress(user.id);
     }
     setUserSection(id);
   };
@@ -128,7 +154,16 @@ export default function App() {
     setUserSection("upload");
   };
 
-  if (!user) return <LoginPage onLogin={(u) => setUser(u)} />;
+  const handleForceRescan = async () => {
+    if (user?.id) {
+      await userForceRescan(user.id);
+      await refreshNotifications(user.id);
+    }
+    setUploadMode("force");
+    setUserSection("upload");
+  };
+
+  if (!user) return <LoginPage onLogin={handleLogin} />;
 
   const role = (user.role || "user").toLowerCase();
 
@@ -161,6 +196,7 @@ export default function App() {
           summary={progressSummary}
           onBack={() => setUserSection(currentAnalysis ? "home" : "upload")}
           onRescan={handleWeeklyRescan}
+          onForceRescan={handleForceRescan}
         />
       );
     }
@@ -171,9 +207,11 @@ export default function App() {
           analysis={currentAnalysis}
           userId={user.id}
           canRescan={canRescan}
+          isForceRescan={isForceRescan}
           daysUntilRescan={daysUntilRescan}
           onProgress={() => setUserSection("progress")}
           onWeeklyRescan={handleWeeklyRescan}
+          onForceRescan={handleForceRescan}
         />
       );
     }
@@ -193,7 +231,7 @@ export default function App() {
 
       <Sidebar
         user={user}
-        onLogout={() => setUser(null)}
+        onLogout={handleLogout}
         userSection={userSection === "results" ? "home" : userSection}
         setUserSection={handleSetUserSection}
         adminSection={adminSection}

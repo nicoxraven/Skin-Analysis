@@ -56,15 +56,18 @@ export function UploadView({ onAnalyze, mode = "first" }) {
     <div className="max-w-lg mx-auto px-4 py-10 sm:py-16">
       <div className="text-center mb-10">
         <span className="inline-flex items-center gap-1.5 bg-secondary text-secondary-foreground px-3 py-1 rounded-full text-xs font-medium mb-5">
-          <Sparkles size={12} /> {mode === "weekly" ? "Weekly check-in" : "First analysis"}
+          <Sparkles size={12} />{" "}
+          {mode === "force" ? "Force rescan" : mode === "weekly" ? "Weekly check-in" : "First analysis"}
         </span>
         <h1 className="font-display text-4xl sm:text-5xl font-semibold text-foreground leading-tight mb-3">
-          {mode === "weekly" ? "Time for a new selfie" : "Upload your selfie"}
+          {mode === "force" ? "Rescan your skin" : mode === "weekly" ? "Time for a new selfie" : "Upload your selfie"}
         </h1>
         <p className="text-muted-foreground leading-relaxed">
-          {mode === "weekly"
-            ? "It has been a week. We will compare your skin, update scores, and refresh your daily routine."
-            : "Take a photo in natural light, no filters. Our AI will build your 7-day routine checklist."}
+          {mode === "force"
+            ? "Upload a new selfie to get updated analysis and a refreshed routine. Your 7-day timer will restart."
+            : mode === "weekly"
+              ? "It has been a week. We will compare your skin, update scores, and refresh your daily routine."
+              : "Take a photo in natural light, no filters. Our AI will build your 7-day routine checklist."}
         </p>
       </div>
 

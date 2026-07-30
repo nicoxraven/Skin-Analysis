@@ -10,6 +10,7 @@ export function LoginPage({ onLogin }) {
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [age, setAge] = useState("");
   const [showPw, setShowPw] = useState(false);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
@@ -21,7 +22,7 @@ export function LoginPage({ onLogin }) {
 
     if (isRegister) {
       // Always register as normal user — admins are seeded in the database only
-      registerUser(name, email, password, "user", "").then((res) => {
+      registerUser(name, email, password, "user", "", age).then((res) => {
         if (res.success) onLogin(res.user);
         else setError(res.error);
         setLoading(false);
@@ -97,18 +98,31 @@ export function LoginPage({ onLogin }) {
 
           <form onSubmit={handleSubmit} className="space-y-4">
             {isRegister && (
-              <div>
-                <label className="text-sm font-medium text-foreground block mb-1.5">Full Name</label>
-                <div className="relative">
-                  <UserPlus size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
-                  <input
-                    type="text" value={name} onChange={(e) => setName(e.target.value)}
-                    placeholder="Jane Doe" required
-                    className="w-full pl-9 pr-4 py-2.5 bg-card border border-border rounded-xl text-sm outline-none focus:border-primary"
-                  />
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="text-sm font-medium text-foreground block mb-1.5">Full Name</label>
+                  <div className="relative">
+                    <UserPlus size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
+                    <input
+                      type="text" value={name} onChange={(e) => setName(e.target.value)}
+                      placeholder="Jane Doe" required
+                      className="w-full pl-9 pr-4 py-2.5 bg-card border border-border rounded-xl text-sm outline-none focus:border-primary"
+                    />
+                  </div>
+                </div>
+                <div>
+                  <label className="text-sm font-medium text-foreground block mb-1.5">Age</label>
+                  <div className="relative">
+                    <input
+                      type="number" value={age} onChange={(e) => setAge(e.target.value)}
+                      placeholder="e.g. 25" required min="18"
+                      className="w-full px-4 py-2.5 bg-card border border-border rounded-xl text-sm outline-none focus:border-primary"
+                    />
+                  </div>
                 </div>
               </div>
             )}
+
             <div>
               <label className="text-sm font-medium text-foreground block mb-1.5">Email</label>
               <div className="relative">
@@ -176,7 +190,7 @@ export function LoginPage({ onLogin }) {
             </p>
           </div>
         </div>
-      </div>
-    </div>
+      </div >
+    </div >
   );
 }

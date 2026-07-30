@@ -1,0 +1,100 @@
+INFO:     Will watch for changes in these directories: ['/home/nico/Downloads/Telegram Desktop/Skincare Analysis UI-2 2/Skincare Analysis UI-2/backend']
+INFO:     Uvicorn running on http://127.0.0.1:8000 (Press CTRL+C to quit)
+INFO:     Started reloader process [145541] using StatReload
+WARNING: All log messages before absl::InitializeLog() is called are written to STDERR
+I0000 00:00:1785428333.690349  145544 cudart_stub.cc:31] Could not find cuda drivers on your machine, GPU will not be used.
+WARNING: All log messages before absl::InitializeLog() is called are written to STDERR
+I0000 00:00:1785428334.912671  145544 cudart_stub.cc:31] Could not find cuda drivers on your machine, GPU will not be used.
+WARNING: All log messages before absl::InitializeLog() is called are written to STDERR
+I0000 00:00:1785428335.921355  145608 gl_context_egl.cc:85] Successfully initialized EGL. Major : 1 Minor: 5
+I0000 00:00:1785428335.929724  145628 gl_context.cc:385] GL version: 3.2 (OpenGL ES 3.2 Mesa 25.2.8-0ubuntu0.24.04.2), renderer: AMD Radeon Graphics (radeonsi, renoir, ACO, DRM 3.64, 7.0.0-28-generic)
+INFO: Created TensorFlow Lite XNNPACK delegate for CPU.
+W0000 00:00:1785428335.934118  145610 inference_feedback_manager.cc:114] Feedback manager requires a model with a single signature inference. Disabling support for feedback tensors.
+INFO:     Started server process [145544]
+INFO:     Waiting for application startup.
+ERROR:    Traceback (most recent call last):
+  File "/home/nico/Downloads/Telegram Desktop/Skincare Analysis UI-2 2/Skincare Analysis UI-2/backend/myenv/lib/python3.12/site-packages/sqlalchemy/engine/base.py", line 1969, in _exec_single_context
+    self.dialect.do_execute(
+  File "/home/nico/Downloads/Telegram Desktop/Skincare Analysis UI-2 2/Skincare Analysis UI-2/backend/myenv/lib/python3.12/site-packages/sqlalchemy/engine/default.py", line 952, in do_execute
+    cursor.execute(statement, parameters)
+sqlite3.OperationalError: no such column: users.force_rescan
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "/home/nico/Downloads/Telegram Desktop/Skincare Analysis UI-2 2/Skincare Analysis UI-2/backend/myenv/lib/python3.12/site-packages/starlette/routing.py", line 638, in lifespan
+    async with self.lifespan_context(app) as maybe_state:
+  File "/home/nico/Downloads/Telegram Desktop/Skincare Analysis UI-2 2/Skincare Analysis UI-2/backend/myenv/lib/python3.12/site-packages/fastapi/routing.py", line 258, in __aenter__
+    await self._router._startup()
+  File "/home/nico/Downloads/Telegram Desktop/Skincare Analysis UI-2 2/Skincare Analysis UI-2/backend/myenv/lib/python3.12/site-packages/fastapi/routing.py", line 6328, in _startup
+    handler()
+  File "/home/nico/Downloads/Telegram Desktop/Skincare Analysis UI-2 2/Skincare Analysis UI-2/backend/main.py", line 253, in on_startup
+    demo_user = db.query(User).filter(User.email == "demo@example.com").first()
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/nico/Downloads/Telegram Desktop/Skincare Analysis UI-2 2/Skincare Analysis UI-2/backend/myenv/lib/python3.12/site-packages/sqlalchemy/orm/query.py", line 2766, in first
+    return self.limit(1)._iter().first()  # type: ignore
+           ^^^^^^^^^^^^^^^^^^^^^
+  File "/home/nico/Downloads/Telegram Desktop/Skincare Analysis UI-2 2/Skincare Analysis UI-2/backend/myenv/lib/python3.12/site-packages/sqlalchemy/orm/query.py", line 2864, in _iter
+    result: Union[ScalarResult[_T], Result[_T]] = self.session.execute(
+                                                  ^^^^^^^^^^^^^^^^^^^^^
+  File "/home/nico/Downloads/Telegram Desktop/Skincare Analysis UI-2 2/Skincare Analysis UI-2/backend/myenv/lib/python3.12/site-packages/sqlalchemy/orm/session.py", line 2373, in execute
+    return self._execute_internal(
+           ^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/nico/Downloads/Telegram Desktop/Skincare Analysis UI-2 2/Skincare Analysis UI-2/backend/myenv/lib/python3.12/site-packages/sqlalchemy/orm/session.py", line 2271, in _execute_internal
+    result: Result[Any] = compile_state_cls.orm_execute_statement(
+                          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/nico/Downloads/Telegram Desktop/Skincare Analysis UI-2 2/Skincare Analysis UI-2/backend/myenv/lib/python3.12/site-packages/sqlalchemy/orm/context.py", line 306, in orm_execute_statement
+    result = conn.execute(
+             ^^^^^^^^^^^^^
+  File "/home/nico/Downloads/Telegram Desktop/Skincare Analysis UI-2 2/Skincare Analysis UI-2/backend/myenv/lib/python3.12/site-packages/sqlalchemy/engine/base.py", line 1421, in execute
+    return meth(
+           ^^^^^
+  File "/home/nico/Downloads/Telegram Desktop/Skincare Analysis UI-2 2/Skincare Analysis UI-2/backend/myenv/lib/python3.12/site-packages/sqlalchemy/sql/elements.py", line 526, in _execute_on_connection
+    return connection._execute_clauseelement(
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/nico/Downloads/Telegram Desktop/Skincare Analysis UI-2 2/Skincare Analysis UI-2/backend/myenv/lib/python3.12/site-packages/sqlalchemy/engine/base.py", line 1643, in _execute_clauseelement
+    ret = self._execute_context(
+          ^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/nico/Downloads/Telegram Desktop/Skincare Analysis UI-2 2/Skincare Analysis UI-2/backend/myenv/lib/python3.12/site-packages/sqlalchemy/engine/base.py", line 1848, in _execute_context
+    return self._exec_single_context(
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/nico/Downloads/Telegram Desktop/Skincare Analysis UI-2 2/Skincare Analysis UI-2/backend/myenv/lib/python3.12/site-packages/sqlalchemy/engine/base.py", line 1988, in _exec_single_context
+    self._handle_dbapi_exception(
+  File "/home/nico/Downloads/Telegram Desktop/Skincare Analysis UI-2 2/Skincare Analysis UI-2/backend/myenv/lib/python3.12/site-packages/sqlalchemy/engine/base.py", line 2365, in _handle_dbapi_exception
+    raise sqlalchemy_exception.with_traceback(exc_info[2]) from e
+  File "/home/nico/Downloads/Telegram Desktop/Skincare Analysis UI-2 2/Skincare Analysis UI-2/backend/myenv/lib/python3.12/site-packages/sqlalchemy/engine/base.py", line 1969, in _exec_single_context
+    self.dialect.do_execute(
+  File "/home/nico/Downloads/Telegram Desktop/Skincare Analysis UI-2 2/Skincare Analysis UI-2/backend/myenv/lib/python3.12/site-packages/sqlalchemy/engine/default.py", line 952, in do_execute
+    cursor.execute(statement, parameters)
+sqlalchemy.exc.OperationalError: (sqlite3.OperationalError) no such column: users.force_rescan
+[SQL: SELECT users.id AS users_id, users.name AS users_name, users.email AS users_email, users.password AS users_password, users.role AS users_role, users.detected_skin_type AS users_detected_skin_type, users.age AS users_age, users.status AS users_status, users.force_rescan AS users_force_rescan, users.created_at AS users_created_at 
+FROM users 
+WHERE users.email = ?
+ LIMIT ? OFFSET ?]
+[parameters: ('demo@example.com', 1, 0)]
+(Background on this error at: https://sqlalche.me/e/20/e3q8)
+
+ERROR:    Application startup failed. Exiting.
+INFO:     Will watch for changes in these directories: ['/home/nico/Downloads/Telegram Desktop/Skincare Analysis UI-2 2/Skincare Analysis UI-2/backend']
+INFO:     Uvicorn running on http://127.0.0.1:8000 (Press CTRL+C to quit)
+INFO:     Started reloader process [146120] using StatReload
+WARNING: All log messages before absl::InitializeLog() is called are written to STDERR
+I0000 00:00:1785428412.016798  146123 cudart_stub.cc:31] Could not find cuda drivers on your machine, GPU will not be used.
+WARNING: All log messages before absl::InitializeLog() is called are written to STDERR
+I0000 00:00:1785428413.345104  146123 cudart_stub.cc:31] Could not find cuda drivers on your machine, GPU will not be used.
+WARNING: All log messages before absl::InitializeLog() is called are written to STDERR
+I0000 00:00:1785428414.402585  146196 gl_context_egl.cc:85] Successfully initialized EGL. Major : 1 Minor: 5
+I0000 00:00:1785428414.411409  146217 gl_context.cc:385] GL version: 3.2 (OpenGL ES 3.2 Mesa 25.2.8-0ubuntu0.24.04.2), renderer: AMD Radeon Graphics (radeonsi, renoir, ACO, DRM 3.64, 7.0.0-28-generic)
+INFO: Created TensorFlow Lite XNNPACK delegate for CPU.
+W0000 00:00:1785428414.417040  146199 inference_feedback_manager.cc:114] Feedback manager requires a model with a single signature inference. Disabling support for feedback tensors.
+INFO:     Started server process [146123]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+SQLite database ready!
+INFO:     127.0.0.1:53626 - "GET /docs HTTP/1.1" 200 OK
+INFO:     Stopping reloader process [145541]
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+INFO:     Application shutdown complete.
+INFO:     Finished server process [146123]
+INFO:     Stopping reloader process [146120]

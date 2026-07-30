@@ -3,7 +3,7 @@ import {
   AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
 } from "recharts";
 
-export function ProgressView({ historyData = [], summary, onBack, onRescan }) {
+export function ProgressView({ historyData = [], summary, onBack, onRescan, onForceRescan }) {
   const current = summary?.current_score ?? (historyData.length ? historyData[historyData.length - 1].score : 0);
   const first = summary?.first_score ?? (historyData.length ? historyData[0].score : 0);
   const gain = summary?.gain ?? (current - first);
@@ -54,13 +54,21 @@ export function ProgressView({ historyData = [], summary, onBack, onRescan }) {
         </div>
       </div>
 
-      {canRescan && (
+      {canRescan ? (
         <button
           type="button"
           onClick={onRescan}
-          className="w-full mb-5 py-3 rounded-xl bg-primary text-primary-foreground text-sm font-semibold hover:opacity-90"
+          className="w-full mb-3 py-3 rounded-xl bg-primary text-primary-foreground text-sm font-semibold hover:opacity-90"
         >
           Start weekly selfie check-in
+        </button>
+      ) : (
+        <button
+          type="button"
+          onClick={onForceRescan}
+          className="w-full mb-3 py-3 rounded-xl border border-primary/20 bg-primary/5 text-primary text-sm font-semibold hover:bg-primary/10 transition-colors flex items-center justify-center gap-2"
+        >
+          <Camera size={15} /> Request new scan
         </button>
       )}
 
