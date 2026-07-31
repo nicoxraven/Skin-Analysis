@@ -3,7 +3,7 @@ import { Key, Camera } from "lucide-react";
 import { Badge } from "../Badge";
 import { AdminHeader } from "../AdminHeader";
 import { DataTable } from "../DataTable";
-import { getUsers, deleteUser, updateUser } from "../../../services/api";
+import { getUsers, deleteUser, updateUser, forceRescan } from "../../../services/api";
 
 export function AdminUsers() {
   const [users, setUsers] = useState([]);
@@ -71,13 +71,13 @@ export function AdminUsers() {
     else alert(res.error || "Delete failed");
   };
 
-  // const handleForceRescan = async (row) => {
-  //   if (row.role === "admin") return;
-  //   if (!confirm(`Allow ${row.name} to upload a new selfie immediately (Forces Rescan)?`)) return;
-  //   const res = await forceRescan(row.id);
-  //   if (res.ok) alert(`Success! ${row.name} can now upload a new selfie.`);
-  //   else alert(res.error || "Failed to force rescan");
-  // };
+  const handleForceRescan = async (row) => {
+    if (row.role === "admin") return;
+    if (!confirm(`Allow ${row.name} to upload a new selfie immediately (Forces Rescan)?`)) return;
+    const res = await forceRescan(row.id);
+    if (res.ok) alert(`Success! ${row.name} can now upload a new selfie.`);
+    else alert(res.error || "Failed to force rescan");
+  };
 
   return (
     <div>
@@ -90,7 +90,7 @@ export function AdminUsers() {
         searchPlaceholder="Search name, email, skin, status…"
       />
       <div className="bg-card border border-border rounded-2xl overflow-hidden">
-        <DataTable columns={cols} data={users} onEdit={handleEdit} editIcon={Key} editTitle="Reset Password" /*onExtraAction={handleForceRescan}*/ extraIcon={Camera} extraTitle="Allow New Rescan" onDelete={handleDelete} />
+        <DataTable columns={cols} data={users} onEdit={handleEdit} editIcon={Key} editTitle="Reset Password" onExtraAction={handleForceRescan} extraIcon={Camera} extraTitle="Allow New Rescan" onDelete={handleDelete} />
       </div>
     </div>
   );

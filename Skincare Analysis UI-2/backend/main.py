@@ -750,6 +750,7 @@ class UserUpdate(BaseModel):
     status: Optional[str] = None
     age: Optional[int] = None
     name: Optional[str] = None
+    password: Optional[str] = None
 
 
 def _dominant_from_scores(scores):
@@ -940,6 +941,13 @@ def admin_force_rescan(user_id: int, db: Session = Depends(get_db)):
     user = db.query(User).filter(User.id == user_id).first()
     if user:
         user.force_rescan = True
+        add_notification(
+            db, user.id,
+            "Rescan requested by admin",
+            "An admin has allowed you to upload a new selfie. Please upload one to refresh your routine.",
+            "reminder",
+            "#D4A843",
+        )
         db.commit()
     return {"success": True}
 
