@@ -3,7 +3,7 @@ import {
   AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
 } from "recharts";
 
-export function ProgressView({ historyData = [], summary, onBack, onRescan, onForceRescan }) {
+export function ProgressView({ historyData = [], summary, onBack, onRescan, onForceRescan, tier = "premium" }) {
   const current = summary?.current_score ?? (historyData.length ? historyData[historyData.length - 1].score : 0);
   const first = summary?.first_score ?? (historyData.length ? historyData[0].score : 0);
   const gain = summary?.gain ?? (current - first);
@@ -62,7 +62,7 @@ export function ProgressView({ historyData = [], summary, onBack, onRescan, onFo
         >
           Start weekly selfie check-in
         </button>
-      ) : (
+      ) : tier === "premium" ? (
         <button
           type="button"
           onClick={onForceRescan}
@@ -70,7 +70,7 @@ export function ProgressView({ historyData = [], summary, onBack, onRescan, onFo
         >
           <Camera size={15} /> Request new scan
         </button>
-      )}
+      ) : null}
 
       {historyData.length > 0 ? (
         <div className="bg-card border border-border rounded-2xl p-5 mb-4">

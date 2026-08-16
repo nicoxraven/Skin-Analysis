@@ -8,6 +8,7 @@ import { getUsers, deleteUser, updateUser, forceRescan } from "../../../services
 export function AdminUsers() {
   const [users, setUsers] = useState([]);
   const [search, setSearch] = useState("");
+  const [filterRequests, setFilterRequests] = useState(false);
 
   const load = async (q = search) => {
     setUsers(await getUsers(q));
@@ -23,7 +24,27 @@ export function AdminUsers() {
   const cols = [
     { key: "name", label: "Name", render: (v) => <span className="font-semibold text-sm">{v}</span> },
     { key: "email", label: "Email", render: (v) => <span className="text-xs text-muted-foreground">{v}</span> },
+    { key: "phone", label: "Phone", render: (v) => <span className="text-xs text-muted-foreground font-mono">{v || "—"}</span> },
     { key: "role", label: "Role", render: (v) => <Badge variant={v === "admin" ? "warning" : "outline"}>{v}</Badge> },
+    {
+      key: "tier",
+      label: "Tier",
+      render: (v, row) => (
+        <button
+          type="button"
+          disabled={row.role === "admin"}
+          onClick={async () => {
+            const next = v === "free" ? "premium" : "free";
+            const res = await updateUser(row.id, { tier: next });
+            if (res.ok) load();
+            else alert(res.error || "Tier update failed");
+          }}
+          title="Click to toggle tier"
+        >
+          <Badge variant={v === "premium" ? "info" : "outline"}>{v || "premium"}</Badge>
+        </button>
+      )
+    },
     { key: "skinType", label: "Skin", render: (v) => <Badge variant="outline">{v}</Badge> },
     { key: "age", label: "Age", render: (v) => <span className="font-mono">{v ?? "—"}</span> },
     { key: "analyses", label: "Scans", render: (v) => <span className="font-mono">{v}</span> },
@@ -79,18 +100,36 @@ export function AdminUsers() {
     else alert(res.error || "Failed to force rescan");
   };
 
+  const filteredUsers = filterRequests
+    ? users.filter(u => u.premiumRequested)
+    : users;
+
   return (
     <div>
       <AdminHeader
         title="Users"
         description="CRUD on registered accounts (admin is seeded, not signed up from UI)."
-        count={users.length}
+        count={filteredUsers.length}
         search={search}
         onSearch={setSearch}
         searchPlaceholder="Search name, email, skin, status…"
       />
+      <div className="flex gap-2 mb-4">
+        <button
+          onClick={() => setFilterRequests(false)}
+          className={`px-3 py-1.5 rounded-lg text-sm font-medium ${!filterRequests ? 'bg-primary text-primary-foreground' : 'bg-muted text-muted-foreground'}`}
+        >
+          All Users
+        </button>
+        <button
+          onClick={() => setFilterRequests(true)}
+          className={`px-3 py-1.5 rounded-lg text-sm font-medium ${filterRequests ? 'bg-primary text-primary-foreground' : 'bg-muted text-muted-foreground'}`}
+        >
+          Premium Requests
+        </button>
+      </div>
       <div className="bg-card border border-border rounded-2xl overflow-hidden">
-        <DataTable columns={cols} data={users} onEdit={handleEdit} editIcon={Key} editTitle="Reset Password" onExtraAction={handleForceRescan} extraIcon={Camera} extraTitle="Allow New Rescan" onDelete={handleDelete} />
+        <DataTable columns={cols} data={filteredUsers} onEdit={handleEdit} editIcon={Key} editTitle="Reset Password" onExtraAction={handleForceRescan} extraIcon={Camera} extraTitle="Allow New Rescan" onDelete={handleDelete} />
       </div>
     </div>
   );

@@ -8,7 +8,7 @@ import {
 import { Badge } from "./Badge";
 import { ScoreRing } from "./ScoreRing";
 import { scoreLabel } from "../lib/helpers";
-import { getTodayRoutine, toggleRoutineStep } from "../../services/api";
+import { getTodayRoutine, toggleRoutineStep, requestPremium } from "../../services/api";
 import { ProductPickerPanel } from "./ProductPickerPanel";
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
@@ -62,12 +62,14 @@ export function ResultsView({
   canRescan = false,
   daysUntilRescan = 7,
   isForceRescan = false,
+  tier = "premium",
 }) {
-  const [tab, setTab] = useState("routine");
+  const [tab, setTab] = useState(tier === "free" ? "concerns" : "routine");
   const [time, setTime] = useState("am");
   const [amDone, setAmDone] = useState([]);
   const [pmDone, setPmDone] = useState([]);
   const [savingStep, setSavingStep] = useState(null);
+  const [upgrading, setUpgrading] = useState(false);
 
   // "My Products" question state
   const [showProductQ, setShowProductQ] = useState(false);
@@ -143,11 +145,16 @@ export function ResultsView({
   }
 
   // Tab definitions with Lucide icons
-  const TABS = [
-    { id: "routine", label: "Routine", Icon: CalendarDays },
-    { id: "concerns", label: "Concerns", Icon: AlertTriangle },
-    { id: "ingredients", label: "Ingredients", Icon: FlaskConical },
-  ];
+  const TABS = tier === "free"
+    ? [
+      { id: "concerns", label: "Concerns", Icon: AlertTriangle },
+      { id: "ingredients", label: "Ingredients", Icon: FlaskConical },
+    ]
+    : [
+      { id: "routine", label: "Routine", Icon: CalendarDays },
+      { id: "concerns", label: "Concerns", Icon: AlertTriangle },
+      { id: "ingredients", label: "Ingredients", Icon: FlaskConical },
+    ];
 
   return (
     <div className="max-w-2xl mx-auto px-4 py-8">
@@ -176,13 +183,15 @@ export function ResultsView({
               <span className="flex items-center gap-1.5 text-xs text-emerald-700 bg-emerald-50 border border-emerald-200 px-3 py-1.5 rounded-xl">
                 <CheckCircle2 size={13} /> Active plan
               </span>
-              <button
-                type="button"
-                onClick={onForceRescan}
-                className="flex items-center gap-1.5 text-xs font-medium text-primary hover:opacity-80 transition-opacity bg-primary/5 px-3 py-1.5 rounded-lg border border-primary/10"
-              >
-                <Camera size={12} /> Request new scan
-              </button>
+              {tier === "premium" && (
+                <button
+                  type="button"
+                  onClick={onForceRescan}
+                  className="flex items-center gap-1.5 text-xs font-medium text-primary hover:opacity-80 transition-opacity bg-primary/5 px-3 py-1.5 rounded-lg border border-primary/10"
+                >
+                  <Camera size={12} /> Request new scan
+                </button>
+              )}
             </>
           )}
         </div>
@@ -193,6 +202,31 @@ export function ResultsView({
           {isForceRescan
             ? "A rescan has been requested. Upload a new selfie to refresh your scores, routine, and restart the 7-day timer."
             : "It has been a week since your last selfie. Upload a new photo to refresh your scores and routine."}
+        </div>
+      )}
+
+      {tier === "free" && (
+        <div className="mb-4 rounded-2xl border border-primary/20 bg-primary/5 px-4 py-3 flex items-center justify-between">
+          <div className="flex flex-col gap-1">
+            <span className="text-sm font-bold text-foreground">Free Tier</span>
+            <span className="text-xs text-muted-foreground">Unlock daily routines with Premium.</span>
+          </div>
+          <button
+            disabled={upgrading}
+            onClick={async () => {
+              setUpgrading(true);
+              try {
+                const res = await requestPremium(userId);
+                if (res.ok) alert("Premium request sent! An admin will review your upgrade shortly.");
+                else alert(res.error || "Could not send premium request.");
+              } finally {
+                setUpgrading(false);
+              }
+            }}
+            className="bg-primary text-primary-foreground px-4 py-1.5 rounded-lg text-xs font-semibold hover:opacity-90 disabled:opacity-50"
+          >
+            {upgrading ? "Requesting…" : "Upgrade Now"}
+          </button>
         </div>
       )}
 
@@ -223,7 +257,7 @@ export function ResultsView({
       </div>
 
       {/* ── "My products" question banner ── */}
-      {showProductQ && (
+      {showProductQ && tier !== "free" && (
         <div className="mb-4 bg-card border border-border rounded-2xl p-5">
           <div className="flex items-start gap-3">
             <div className="w-9 h-9 rounded-xl bg-primary/10 flex items-center justify-center flex-shrink-0">
@@ -256,7 +290,7 @@ export function ResultsView({
       )}
 
       {/* Quick "manage products" button always available after question is dismissed */}
-      {!showProductQ && (
+      {!showProductQ && tier !== "free" && (
         <button
           type="button"
           onClick={() => setShowPicker(true)}
@@ -449,7 +483,7 @@ export function ResultsView({
       </div>
 
       {/* Product Picker modal */}
-      {showPicker && (
+      {showPicker && tier !== "free" && (
         <ProductPickerPanel
           userId={userId}
           preSelected={myProducts}

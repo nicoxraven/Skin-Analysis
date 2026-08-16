@@ -1,11 +1,26 @@
+import { useState } from "react";
 import {
   Sparkles, Shield, UserCircle, X, LogOut,
 } from "lucide-react";
 import { USER_NAV, ADMIN_NAV } from "../lib/constants";
+import { requestPremium } from "../../services/api";
 
 export function Sidebar({
   user, onLogout, userSection, setUserSection, adminSection, setAdminSection, open, onClose,
 }) {
+  const [requesting, setRequesting] = useState(false);
+
+  const handleRequestPremium = async () => {
+    setRequesting(true);
+    try {
+      const res = await requestPremium(user.id);
+      if (res.ok) alert("Premium request sent to Admin!");
+      else alert(res.error || "Failed to request premium");
+    } finally {
+      setRequesting(false);
+    }
+  };
+
   const role = (user.role || "user").toLowerCase();
   const nav = role === "user" ? USER_NAV : ADMIN_NAV;
   const setSection = (id) => {
@@ -56,7 +71,9 @@ export function Sidebar({
         <div className="px-4 py-3">
           <div className={`rounded-xl px-3 py-2 flex items-center gap-2 ${role === "admin" ? "bg-primary/8" : "bg-secondary"}`}>
             {role === "admin" ? <Shield size={14} className="text-primary" /> : <UserCircle size={14} className="text-primary" />}
-            <span className="text-xs font-medium text-foreground capitalize">{user.role} View</span>
+            <span className="text-xs font-medium text-foreground capitalize">
+              {role === "admin" ? "Admin View" : `${user.tier || "Premium"} Tier`}
+            </span>
           </div>
         </div>
 
@@ -71,6 +88,21 @@ export function Sidebar({
             </button>
           ))}
         </nav>
+
+        {role === "user" && user.tier === "free" && !user.premiumRequested && (
+          <div className="px-4 py-3 border-t border-border mt-auto">
+            <button
+              onClick={handleRequestPremium}
+              disabled={requesting}
+              className="w-full py-2 bg-primary/10 text-primary hover:bg-primary/20 rounded-xl text-sm font-semibold transition-colors disabled:opacity-50"
+            >
+              {requesting ? "Requesting..." : "Request Premium"}
+            </button>
+            <p className="text-[10px] text-muted-foreground text-center mt-2 leading-relaxed">
+              Unlock weekly scans and continuous progress tracking.
+            </p>
+          </div>
+        )}
 
         {/* User footer */}
         <div className="px-4 py-4 border-t border-border">

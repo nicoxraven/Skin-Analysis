@@ -39,7 +39,7 @@ function withAvatar(user) {
   };
 }
 
-export async function registerUser(name, email, password, role = "user", adminCode = "") {
+export async function registerUser(name, email, password, phoneNumber = "", age = 22, role = "user", adminCode = "") {
   const result = await request("/api/auth/register", {
     method: "POST",
     body: JSON.stringify({
@@ -47,9 +47,10 @@ export async function registerUser(name, email, password, role = "user", adminCo
       email,
       password,
       skin_type: "Combination",
-      age: 25,
+      age: Number(age),
       role,
       admin_code: adminCode,
+      phone_number: phoneNumber,
     }),
   });
   if (!result.ok) return { success: false, error: result.error };
@@ -217,6 +218,10 @@ export async function forceRescan(id) {
 
 export async function userForceRescan(userId) {
   return request(`/api/user/${userId}/force_rescan`, { method: "POST" });
+}
+
+export async function requestPremium(userId) {
+  return request(`/api/user/${userId}/request-premium`, { method: "POST" });
 }
 
 export async function deleteAnalysis(id) {

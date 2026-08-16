@@ -7,7 +7,7 @@ from typing import Optional, List
 from fastapi import FastAPI, Depends, UploadFile, File, HTTPException, Form
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session
-from sqlalchemy import func
+from sqlalchemy import func, text
 from pydantic import BaseModel, EmailStr
 
 sys.path.append(os.path.join(os.path.dirname(__file__), "ai"))
@@ -32,6 +32,7 @@ class UserRegister(BaseModel):
     age: int = 22
     role: Optional[str] = "user"
     admin_code: Optional[str] = ""
+    phone_number: Optional[str] = None
 
 class UserLogin(BaseModel):
     email: EmailStr
@@ -87,6 +88,10 @@ def user_payload(user: User):
         "email": user.email,
         "age": user.age,
         "role": user.role,
+        "tier": user.tier,
+        "phone_number": user.phone_number,
+        "premium_requested": bool(user.premium_requested),
+        "tier_expires_at": user.tier_expires_at.isoformat() if user.tier_expires_at else None,
         "skin_type": user.detected_skin_type,
         "status": user.status,
     }
@@ -250,6 +255,22 @@ def on_startup():
     init_db()
     db = next(get_db())
 
+    try:
+        db.execute(text("ALTER TABLE users ADD COLUMN tier VARCHAR DEFAULT 'premium'"))
+        db.execute(text("ALTER TABLE users ADD COLUMN phone_number VARCHAR"))
+        db.execute(text("ALTER TABLE users ADD COLUMN tier_expires_at DATETIME"))
+        db.execute(text("ALTER TABLE users ADD COLUMN daily_scan_count INTEGER DEFAULT 0"))
+        db.execute(text("ALTER TABLE users ADD COLUMN daily_scan_date VARCHAR"))
+        db.commit()
+    except Exception:
+        db.rollback()
+
+    try:
+        db.execute(text("ALTER TABLE users ADD COLUMN premium_requested BOOLEAN DEFAULT 0"))
+        db.commit()
+    except Exception:
+        db.rollback()
+
     demo_user = db.query(User).filter(User.email == "demo@example.com").first()
     if not demo_user:
         db.add(User(
@@ -280,7 +301,11 @@ def register_user(user_data: UserRegister, db: Session = Depends(get_db)):
     if existing:
         raise HTTPException(status_code=400, detail="Email is already registered.")
 
-    # Admins are seeded only — public registration is always a normal user
+    import re
+    if not user_data.phone_number or not re.match(r"^09\d{7,9}$", user_data.phone_number.strip()):
+        raise HTTPException(status_code=400, detail="A valid KBZ Pay phone number (09xxxxxxxxx) is required.")
+
+    # Admins are seeded only — public registration defaults to free tier
     new_user = User(
         name=user_data.name,
         email=user_data.email,
@@ -288,6 +313,9 @@ def register_user(user_data: UserRegister, db: Session = Depends(get_db)):
         age=user_data.age,
         detected_skin_type=user_data.skin_type,
         role="user",
+        tier="free",
+        phone_number=user_data.phone_number.strip(),
+        tier_expires_at=datetime.datetime.utcnow() + datetime.timedelta(days=30),
     )
     db.add(new_user)
     db.commit()
@@ -339,6 +367,32 @@ async def user_analyze_skin(
 
     if user_age is not None:
         user.age = user_age
+
+    if user.tier == "free" and user.tier_expires_at:
+        if datetime.datetime.utcnow() > user.tier_expires_at:
+            raise HTTPException(status_code=403, detail="Free tier has expired (30 days limit). Please upgrade to premium.")
+            
+    now = datetime.datetime.utcnow()
+    
+    if user.tier == "free" and user.created_at:
+        if (now - user.created_at).days > 30:
+            raise HTTPException(status_code=403, detail="Free tier trial period has expired. Please upgrade to premium for further scans.")
+
+    if user.tier == "premium":
+        last_scan = None
+        if user.daily_scan_date:
+            try:
+                last_scan = datetime.datetime.strptime(user.daily_scan_date, "%Y-%m-%d")
+            except ValueError:
+                pass
+                
+        if not last_scan or (now - last_scan).days >= 7:
+            user.daily_scan_count = 0
+            user.daily_scan_date = now.strftime("%Y-%m-%d")
+            
+        if (user.daily_scan_count or 0) >= 3:
+            raise HTTPException(status_code=429, detail="Weekly scan limit reached (3 per week). Please wait until your next rolling week starts.")
+        user.daily_scan_count = (user.daily_scan_count or 0) + 1
 
     latest = (
         db.query(Analysis)
@@ -460,22 +514,29 @@ def get_latest_analysis(user_id: int, db: Session = Depends(get_db)):
         .order_by(Analysis.created_at.desc())
         .first()
     )
+    tier_expired = False
+    if user.tier == "free" and user.tier_expires_at:
+        if datetime.datetime.utcnow() > user.tier_expires_at:
+            tier_expired = True
+
     if not scan:
         return {
             "has_analysis": False,
-            "can_rescan": True,
+            "can_rescan": not tier_expired,
             "needs_first_scan": True,
             "analysis": None,
+            "tier": user.tier,
+            "tier_expired": tier_expired,
         }
 
     payload = analysis_ui_payload(scan)
     streak = compute_streak(db, user_id)
     days_until = max(0, RESCAN_DAYS - max(payload["days_since"], streak))
     if user.force_rescan:
-        payload["can_rescan"] = True
+        payload["can_rescan"] = not tier_expired
         payload["days_until_rescan"] = 0
     else:
-        payload["can_rescan"] = days_until <= 0
+        payload["can_rescan"] = (days_until <= 0) and not tier_expired
         payload["days_until_rescan"] = days_until
 
     return {
@@ -486,6 +547,8 @@ def get_latest_analysis(user_id: int, db: Session = Depends(get_db)):
         "days_until_rescan": payload["days_until_rescan"],
         "days_since": payload["days_since"],
         "analysis": payload,
+        "tier": user.tier,
+        "tier_expired": tier_expired,
     }
 
 
@@ -724,18 +787,28 @@ def mark_all_notifications_read(user_id: int, db: Session = Depends(get_db)):
 
 @app.post("/api/user/{user_id}/force_rescan")
 def user_force_rescan(user_id: int, db: Session = Depends(get_db)):
-    """User-initiated force rescan — enables rescan and resets timer on next upload."""
+    """User-initiated force rescan — requests admin to allow the rescan."""
     user = db.query(User).filter(User.id == user_id).first()
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
-    user.force_rescan = True
-    add_notification(
-        db, user.id,
-        "Force scan enabled",
-        "Upload a new selfie to get updated analysis and a refreshed routine.",
-        "reminder",
-        "#6B8EAF",
-    )
+    
+    admin_user = db.query(User).filter(User.role == "admin").first()
+    if admin_user:
+        add_notification(
+            db, admin_user.id,
+            "Rescan Request",
+            f"User {user.name} ({user.email}) requested a new scan.",
+            "info"
+        )
+    return {"success": True, "message": "Request sent to Admin."}
+
+
+@app.post("/api/user/{user_id}/request-premium")
+def request_premium(user_id: int, db: Session = Depends(get_db)):
+    user = db.query(User).filter(User.id == user_id).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    user.premium_requested = True
     db.commit()
     return {"success": True}
 
@@ -751,6 +824,8 @@ class UserUpdate(BaseModel):
     age: Optional[int] = None
     name: Optional[str] = None
     password: Optional[str] = None
+    tier: Optional[str] = None
+    phone_number: Optional[str] = None
 
 
 def _dominant_from_scores(scores):
@@ -914,7 +989,8 @@ def get_admin_dashboard(
 
 @app.get("/api/admin/users")
 def get_admin_users(q: Optional[str] = None, db: Session = Depends(get_db)):
-    users = db.query(User).order_by(User.created_at.desc()).all()
+    query = db.query(User).order_by(User.premium_requested.desc(), User.created_at.desc())
+    users = query.all()
     rows = []
     for u in users:
         row = {
@@ -927,16 +1003,19 @@ def get_admin_users(q: Optional[str] = None, db: Session = Depends(get_db)):
             "analyses": len(u.analyses) if u.analyses else 0,
             "status": u.status,
             "role": u.role,
+            "tier": u.tier,
+            "phone": u.phone_number,
+            "premiumRequested": bool(u.premium_requested),
         }
         if q:
-            blob = f"{row['name']} {row['email']} {row['skinType']} {row['status']} {row['role']}".lower()
+            blob = f"{row['name']} {row['email']} {row['skinType']} {row['status']} {row['role']} {row['tier']}".lower()
             if q.lower() not in blob:
                 continue
         rows.append(row)
     return rows
 
 
-@app.post("/api/admin/users/{user_id}/force_rescan")
+@app.post("/api/admin/users/{user_id}/force-rescan")
 def admin_force_rescan(user_id: int, db: Session = Depends(get_db)):
     user = db.query(User).filter(User.id == user_id).first()
     if user:
@@ -948,6 +1027,15 @@ def admin_force_rescan(user_id: int, db: Session = Depends(get_db)):
             "reminder",
             "#D4A843",
         )
+        
+        # Remove the request notification from Admin
+        admin_user = db.query(User).filter(User.role == "admin").first()
+        if admin_user:
+            db.query(Notification).filter(
+                Notification.user_id == admin_user.id,
+                Notification.title == "Rescan Request",
+                Notification.body.contains(f"({user.email})")
+            ).delete()
         db.commit()
     return {"success": True}
 
@@ -960,6 +1048,16 @@ def update_user(user_id: int, payload: UserUpdate, db: Session = Depends(get_db)
     data = payload.model_dump(exclude_unset=True)
     if "status" in data and data["status"] not in ("Active", "Suspended"):
         raise HTTPException(status_code=400, detail="status must be Active or Suspended")
+    if "tier" in data:
+        if data["tier"] == "premium":
+            user.premium_requested = False
+            admin_user = db.query(User).filter(User.role == "admin").first()
+            if admin_user:
+                db.query(Notification).filter(
+                    Notification.user_id == admin_user.id,
+                    Notification.title == "Premium Request",
+                    Notification.body.contains(f"({user.email})")
+                ).delete()
     for field, value in data.items():
         setattr(user, field, value)
     db.commit()
@@ -980,30 +1078,6 @@ def delete_user(user_id: int, db: Session = Depends(get_db)):
     db.delete(user)
     db.commit()
     return {"success": True}
-
-
-@app.post("/api/admin/users/{user_id}/reset-rescan")
-def admin_reset_rescan(user_id: int, db: Session = Depends(get_db)):
-    """
-    Testing/Demo only: backdates the user's latest analysis by 8 days,
-    making can_rescan=True so teachers can demo a fresh upload right away.
-    The 7-day cycle logic is unchanged — this just simulates time passing.
-    """
-    user = db.query(User).filter(User.id == user_id).first()
-    if not user:
-        raise HTTPException(status_code=404, detail="User not found")
-    latest = (
-        db.query(Analysis)
-        .filter(Analysis.user_id == user_id)
-        .order_by(Analysis.created_at.desc())
-        .first()
-    )
-    if not latest:
-        raise HTTPException(status_code=404, detail="User has no analyses to reset")
-    # Backdate by 8 days so the 7-day gate opens immediately
-    latest.created_at = datetime.datetime.utcnow() - datetime.timedelta(days=8)
-    db.commit()
-    return {"success": True, "message": f"Rescan timer reset for {user.name}. They can now upload a new selfie."}
 
 
 @app.get("/api/admin/analyses")

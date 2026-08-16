@@ -13,6 +13,7 @@ import { ResultsView } from "./components/ResultsView";
 import { ProgressView } from "./components/ProgressView";
 import { Sidebar } from "./components/Sidebar";
 import { NotifPanel } from "./components/NotifPanel";
+import { LandingPage } from "./components/LandingPage";
 import { AdminDashboard } from "./components/admin/AdminDashboard";
 import { AdminUsers } from "./components/admin/AdminUsers";
 import { AdminAnalyses } from "./components/admin/AdminAnalyses";
@@ -34,6 +35,7 @@ export default function App() {
   const [notifOpen, setNotifOpen] = useState(false);
   const notifRef = useRef(null);
   const [unreadCount, setUnreadCount] = useState(0);
+  const [showLogin, setShowLogin] = useState(false);
 
   const [uploadingFile, setUploadingFile] = useState(null);
   const [uploadMode, setUploadMode] = useState("first"); // first | weekly
@@ -155,15 +157,20 @@ export default function App() {
   };
 
   const handleForceRescan = async () => {
-    if (user?.id) {
-      await userForceRescan(user.id);
-      await refreshNotifications(user.id);
+    if (!user?.id) return;
+    const res = await userForceRescan(user.id);
+    if (!res.ok) {
+      alert(res.error || "You've reached your limit of 3 scans this week. Please try again next week.");
+      return;
     }
-    setUploadMode("force");
-    setUserSection("upload");
+    await refreshNotifications(user.id);
+    alert(res.data?.message || "Request sent to Admin.");
   };
 
-  if (!user) return <LoginPage onLogin={handleLogin} />;
+  if (!user) {
+    if (showLogin) return <LoginPage onLogin={handleLogin} />;
+    return <LandingPage onLoginClick={() => setShowLogin(true)} onRegisterClick={() => setShowLogin(true)} />;
+  }
 
   const role = (user.role || "user").toLowerCase();
 
@@ -209,6 +216,7 @@ export default function App() {
           canRescan={canRescan}
           isForceRescan={isForceRescan}
           daysUntilRescan={daysUntilRescan}
+          tier={user.tier}
           onProgress={() => setUserSection("progress")}
           onWeeklyRescan={handleWeeklyRescan}
           onForceRescan={handleForceRescan}
